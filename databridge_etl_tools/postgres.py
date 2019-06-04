@@ -228,10 +228,6 @@ class Postgres():
                 str_header += field
 
         self.logger.info('Writing to table: {}...'.format(self.table_schema_name))
-        # format geom field:
-        if self.geom_field and self.geom_srid:
-            rows = rows.convert(self.geom_field,
-                                lambda c: 'SRID={srid};{geom}'.format(srid=self.geom_srid, geom=c) if c else '') \
 
         write_file = self.temp_csv_path
         rows.tocsv(write_file, write_header=False)
