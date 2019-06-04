@@ -35,7 +35,7 @@ setup(
         ]
     },
     dependency_links=[
-        'https://github.com/CityOfPhiladelphia/geopetl/tarball/e3df5d8e5e0116da2414ebcd94e5a837f885d960'
+        'https://github.com/CityOfPhiladelphia/geopetl/tarball/817ed4ea623d677a424f249743e9a973cd03f4b7'
     ],
     entry_points={
         'console_scripts': [
