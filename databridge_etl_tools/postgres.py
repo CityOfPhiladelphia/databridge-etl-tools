@@ -12,19 +12,21 @@ import petl as etl
 csv.field_size_limit(sys.maxsize)
 
 DATA_TYPE_MAP = {
-    'string':           'text',
-    'number':           'numeric',
-    'float':            'numeric',
-    'double precision': 'numeric',
-    'integer':          'integer',
-    'boolean':          'boolean',
-    'object':           'jsonb',
-    'array':            'jsonb',
-    'date':             'date',
-    'time':             'time',
-    'datetime':         'date',
-    'geom':             'geometry',
-    'geometry':         'geometry'
+    'string':                      'text',
+    'number':                      'numeric',
+    'float':                       'numeric',
+    'double precision':            'numeric',
+    'integer':                     'integer',
+    'boolean':                     'boolean',
+    'object':                      'jsonb',
+    'array':                       'jsonb',
+    'date':                        'date',
+    'time':                        'time',
+    'datetime':                    'timestamp without time zone',
+    'timestamp without time zone': 'timestamp without time zone',
+    'timestamp with time zone':    'timestamp with time zone',
+    'geom':                        'geometry',
+    'geometry':                    'geometry'
 }
 
 GEOM_TYPE_MAP = {
