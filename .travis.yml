@@ -34,26 +34,26 @@ script:
   # Needed to avoid bug with Travis using moto https://github.com/spulec/moto/issues/1771
   - export BOTO_CONFIG=/dev/null
   - .travis/run_tests.sh
-  - .travis/get_psycopg2.sh
-  - .travis/build_lambda.sh
+  #- .travis/get_psycopg2.sh
+  #- .travis/build_lambda.sh
 
 deploy:
-  - provider: s3
-    access_key_id: $AWS_ACCESS_KEY_ID
-    secret_access_key: $AWS_SECRET_ACCESS_KEY
-    bucket: 'citygeo-airflow-databridge2'
-    on:
-      all_branches: true
-      condition: $TRAVIS_BRANCH =~ ^master|test$
-    skip_cleanup: true
-    local-dir: dist
-    upload-dir: lambda
-  - provider: script
-    script: .travis/deploy_lambda.sh
-    on:
-      all_branches: true
-      condition: $TRAVIS_BRANCH =~ ^master|test$
-    skip_cleanup: true
+  #- provider: s3
+  #  access_key_id: $AWS_ACCESS_KEY_ID
+  #  secret_access_key: $AWS_SECRET_ACCESS_KEY
+  #  bucket: 'citygeo-airflow-databridge2'
+  #  on:
+  #    all_branches: true
+  #    condition: $TRAVIS_BRANCH =~ ^master|test$
+  #  skip_cleanup: true
+  #  local-dir: dist
+  #  upload-dir: lambda
+  # - provider: script
+  #   script: .travis/deploy_lambda.sh
+  #   on:
+  #     all_branches: true
+  #     condition: $TRAVIS_BRANCH =~ ^master|test$
+  #   skip_cleanup: true
   - provider: script
     script: .travis/deploy_ecr.sh
     on:
