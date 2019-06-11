@@ -63,7 +63,7 @@ RUN set -ex \
        click==7.0 \
        cryptography==2.6.1 \
        cx-Oracle==7.0.0 \
-       -e git+https://github.com/CityOfPhiladelphia/geopetl.git@49bc0300baad2be2ccdcb40555c6202cd5c7fad9#egg=geopetl \
+       -e git+https://github.com/CityOfPhiladelphia/geopetl.git@ccb1d2032a9bcceb12267890aed2a21c875055f0#egg=geopetl \
        petl==1.2.0 \
        psycopg2==2.8.1 \
        pyasn1==0.4.5 \
