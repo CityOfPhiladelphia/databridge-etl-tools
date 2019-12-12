@@ -53,6 +53,7 @@ class Carto():
     _schema = None
     _geom_field = None
     _geom_srid = None
+    _array_fields = None
 
     def __init__(self, 
                  connection_string, 
@@ -214,6 +215,24 @@ class Carto():
                         self._geom_srid = geom_srid
         return self._geom_srid
 
+    @property
+    def array_fields(self):
+        if self._array_fields is None:
+            with open(self.json_schema_path) as json_file:
+                schema = json.load(json_file).get('fields', None)
+                if not schema:
+                    self.logger.error('Json schema malformatted...')
+                    raise
+                for scheme in schema:
+                    scheme_type = DATA_TYPE_MAP.get(scheme['type'].lower(), scheme['type'])
+                    if scheme_type == 'jsonb':
+                        array_field = scheme.get('name', None)
+                        if self._array_fields is None:
+                            self._array_fields = []
+                        self._array_fields.append(array_field)
+        return self._array_fields
+
+
     def get_json_schema_from_s3(self):
         self.logger.info('Fetching json schema: s3://{}/{}'.format(self.s3_bucket, self.json_schema_s3_key))
 
@@ -255,13 +274,13 @@ class Carto():
             self.create_indexes()
 
         self.logger.info('Temp table created successfully.\n')
-        
+
     def create_indexes(self):
         self.logger.info('Creating indexes on {}: {}'.format(
             self.temp_table_name,
             self.index_fields)
         )
-        
+
         indexes = self.index_fields.split(',')
         stmt = ''
         for indexes_field in indexes:
@@ -292,6 +311,9 @@ class Carto():
         if self.geom_field and self.geom_srid:
             rows = rows.convert(self.geom_field,
                                 lambda c: 'SRID={srid};{geom}'.format(srid=self.geom_srid, geom=c) if c and 'SRID=' not in c else c if c else '')
+        if self.array_fields:
+            for field in self.array_fields:
+                rows = rows.convert(field, lambda c: '[]' if not c else c)
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
         q = "COPY {table_name} ({header}) FROM STDIN WITH (FORMAT csv, HEADER true)".format(
