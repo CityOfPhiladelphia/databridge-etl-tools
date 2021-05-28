@@ -25,7 +25,7 @@ setup(
         'urllib3==1.24.2'
     ],
     extras_require={
-        'carto': ['carto==1.11.2'],
+        'carto': ['carto==1.4.0'],
         'oracle': ['cx_Oracle==8.2.0'],
         'postgres': ['psycopg2-binary==2.8.6'],
         'dev': [
