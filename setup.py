@@ -16,7 +16,7 @@ setup(
         'future==0.17.1',
         'idna==2.8',
         'jmespath==0.9.4',
-        'petl==1.2.0',
+        'petl==1.6.8',
         'pyrestcli==0.6.8',
         'python-dateutil==2.8.0',
         'requests==2.21.0',
