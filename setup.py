@@ -13,7 +13,7 @@ setup(
         'chardet==4.0.0',
         'click==8.0.4',
         'docutils==0.15.2',
-        'future==0.18.2',
+        'future==0.18.3',
         'idna==3.3',
         'jmespath==0.10.0',
         'mock==4.0.3',
