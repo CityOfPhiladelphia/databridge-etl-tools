@@ -151,6 +151,7 @@ def ago_truncate_append(ago_org_url, ago_user, ago_pw, ago_item_name, s3_bucket,
         in_srid=in_srid,
         clean_columns=clean_columns,
         batch_size=batch_size)
+    ago.preflight_checks()
     ago.get_csv_from_s3()
     ago.append(truncate=True)
     ago.verify_count()

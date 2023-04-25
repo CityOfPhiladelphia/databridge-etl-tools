@@ -37,6 +37,9 @@ class AGO():
     _transformer = None
     _primary_key = None
     _json_schema_s3_key = None
+    _ago_token = None
+    _ago_endpoint_url = None
+    _layer_def = None
 
     def __init__(self,
                  ago_org_url,
@@ -249,6 +252,42 @@ class AGO():
         # Unzip:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(self.export_dir_path)
+
+
+
+    def preflight_checks(self):
+        # 1. Make sure the feature layer has "supportsAppend" metadata on it
+        #https://developers.arcgis.com/rest/services-reference/enterprise/append-feature-service-layer-.htm
+
+        params = {
+            'f': 'json',
+            'returnMetadata': 'true',
+            'metadata': 'true',
+            'token': self.ago_token,
+            'returnUpdates': 'false',
+            'returnCountOnly': 'false'
+        }
+        #pjson_url = self.ago_endpoint_url + f'?f=pjson&token={self.ago_token}'
+        response = requests.get(self.ago_endpoint_url, params=params)
+        #print(response.status_code)
+        #print(response.text)
+        if response.status_code == 200:
+            # Extract the metadata from the response
+            # Note, metadata has all the goodies on the feature layer like field types and indexs and what not, could be useful for a lot more.
+            metadata = response.json()
+
+            # Set our item_id in case we need it.
+            self.item_id = metadata.get('serviceItemId')
+            self.esri_geometry_type = metadata.get('geometryType')
+
+            # Check if supportsAppend is present in the metadata
+            if metadata and metadata['supportsAppend'] == True:
+                print(f"Feature service layer supports append: {metadata.get('supportsAppend')}")
+            else:
+                raise AssertionError("Feature service layer does not support append.")
+        else:
+            raise AssertionError("Error: Could not connect to the feature service layer.")
+
 
 
     def overwrite(self):
@@ -563,14 +602,16 @@ class AGO():
                     start = time()
                     row_count = i+1
                     self.logger.info(f'Adding batch of {len(adds)}, at row #: {row_count}...')
-                    self.edit_features(rows=adds, row_count=row_count, method='adds')
+                    #self.edit_features(rows=adds, row_count=row_count, method='adds')
+                    self.append_rows(rows=adds)
                     adds = []
                     self.logger.info(f'Duration: {time() - start}\n')
             if adds:
                 start = time()
                 row_count = i+1
                 self.logger.info(f'Adding last batch of {len(adds)}, at row #: {row_count}...')
-                self.edit_features(rows=adds, row_count=row_count, method='adds')
+                #self.edit_features(rows=adds, row_count=row_count, method='adds')
+                self.append_rows(rows=adds)
                 self.logger.info(f'Duration: {time() - start}\n')
         elif self.geometric:
             for i, row in enumerate(row_dicts):
@@ -678,20 +719,8 @@ class AGO():
                 if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
                     self.logger.info(f'Adding batch of {len(adds)}, at row #: {row_count}...')
                     start = time()
-                    self.edit_features(rows=adds, row_count=row_count, method='adds')
-
-                    # Commenting out multithreading for now.
-                    #split_batches = np.array_split(adds,2)
-                    # Where we actually append the rows to the dataset in AGO
-                    #t1 = Thread(target=self.edit_features,
-                    #            args=(list(split_batches[0]), 'adds'))
-                    #t2 = Thread(target=self.edit_features,
-                    #            args=(list(split_batches[1]), 'adds'))
-                    #t1.start()
-                    #t2.start()
-
-                    #t1.join()
-                    #t2.join()
+                    #self.edit_features(rows=adds, row_count=row_count, method='adds')
+                    self.append_rows(rows=adds)
 
                     adds = []
                     self.logger.info(f'Duration: {time() - start}\n')
@@ -699,14 +728,68 @@ class AGO():
             if adds:
                 start = time()
                 self.logger.info(f'Adding last batch of {len(adds)}, at row #: {i+1}...')
-                #self.logger.info(f'Example row: {adds[0]}')
-                #self.logger.info(f'batch: {adds}')
-                self.edit_features(rows=adds, row_count=row_count, method='adds')
+                #self.edit_features(rows=adds, row_count=row_count, method='adds')
+                self.append_rows(rows=adds)
                 self.logger.info(f'Duration: {time() - start}')
 
         ago_count = self.layer_object.query(return_count_only=True)
         self.logger.info(f'count after batch adds: {str(ago_count)}')
         assert ago_count != 0
+
+
+    @property
+    def layer_def(self):
+        if self._layer_def:
+            return self._layer_def
+        else:
+            url = f"https://www.arcgis.com/sharing/rest/content/items/{self.item_id}/data?f=json&token={self.ago_token}"
+            response = requests.get(url)
+            data = response.json()
+            print(data)
+            layer_def = data.get("layerDefinition")
+            print(self._layer_def)
+            assert layer_def
+            self._layer_def = layer_def
+            return self._layer_def
+
+
+    def append_rows(self, rows):
+        #https://developers.arcgis.com/rest/services-reference/enterprise/append-feature-service-layer-.htm
+        
+        append_endpoint_url = self.ago_endpoint_url + '/append'
+        print(append_endpoint_url)
+        #append_endpoint_url = f'https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/roland_publishing_testing/FeatureServer/append?token={self.ago_token}'
+        append_endpoint_url = f'https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/roland_publishing_testing/FeatureServer/append'
+        print(append_endpoint_url)
+
+        edits = {
+            "featureSet": {
+                "geometryType": self.esri_geometry_type,
+                "features": rows
+            }
+        }
+
+        print(f'DEBUG: {pprint(edits, indent=1)}')
+
+        params = {
+            'f': 'json',
+            'token': self.ago_token,
+        }
+
+        data = json.dumps(edits)
+
+        response = requests.post(append_endpoint_url, params=params, data=data)
+        print(response.status_code)
+        print(response.text)
+        # We will get a statusUrl back which is an "Append Features Status" page on our append job
+        return_info = response.json()
+        statusUrl = return_info.get('statusUrl')
+
+        sleep(2)
+        response = requests.get(statusUrl + f'?token={self.ago_token}')
+        print(response.text)
+        print(response.status_code)
+        raise
 
 
     def edit_features(self, rows, row_count, method='adds'):
@@ -1077,11 +1160,9 @@ class AGO():
                 if not ago_row.sdf.empty:
                     ago_objectid = ago_row.sdf.iloc[0]['OBJECTID']
                 else:
-                    #self.logger.info(f'DEBUG! ago_row is empty?: {ago_row}')
                     self.logger.info(ago_row.sdf)
                     ago_objectid = False
 
-                #self.logger.info(f'DEBUG! ago_objectid: {ago_objectid}')
     
                 # Reassign the objectid or assign it to match the row in AGO. This will
                 # make it work with AGO's 'updates' endpoint and work like an upsert.
@@ -1354,6 +1435,26 @@ class AGO():
                     continue
                 else:
                     raise e
+                
+    
+    @property
+    def ago_token(self):
+        if self._ago_token:
+            return self._ago_token
+        else:
+            token_url = 'https://arcgis.com/sharing/rest/generateToken'
+            data = {'username': self.ago_user,
+                    'password': self.ago_password,
+                    'referer': 'https://www.arcgis.com',
+                    'f': 'json'}
+            self._ago_token = requests.post(token_url, data).json()['token']
+            return self._ago_token
+        
+
+    @property
+    def ago_endpoint_url(self):
+        self._ago_endpoint_url = f'https://services.arcgis.com/{self.ago_org_id}/arcgis/rest/admin/services/{self.item_name}/FeatureServer/0'
+        return self._ago_endpoint_url
 
 
     def post_index_fields(self):
@@ -1365,13 +1466,6 @@ class AGO():
         Then loop through the index fields we were passed and attempt to update the AGO item definition
         with the new index
         """
-        url = 'https://arcgis.com/sharing/rest/generateToken'
-        data = {'username': self.ago_user,
-                'password': self.ago_password,
-                'referer': 'https://www.arcgis.com',
-                'f': 'json'}
-        #ago_token = requests.post(url, data, verify=False).json()['token']
-        ago_token = requests.post(url, data).json()['token']
 
         # Import field information from the json schema file generated by dbtools extract (postgres or oracle)
         # We will loop through it and see if any of these fields are unique.
@@ -1413,12 +1507,12 @@ class AGO():
             jsonData = json.dumps(index_json)
 
             # This endpoint is publicly viewable on AGO while not logged in.
-            url = f'https://services.arcgis.com/{self.ago_org_id}/arcgis/rest/admin/services/{self.item_name}/FeatureServer/0/addToDefinition'
+            item_definition_url = self.ago_endpoint_url + '/addToDefinition'
 
             headers = { 'Content-Type': 'application/x-www-form-urlencoded' }
             self.logger.info(f'\nPosting index for {field}...')
             self.logger.info(jsonData)
-            r = requests.post(f'{url}?token={ago_token}', data = {'f': 'json', 'addToDefinition': jsonData }, headers=headers, timeout=360)
+            r = requests.post(f'{self.ago_endpoint_url}?token={self.ago_token}', data = {'f': 'json', 'addToDefinition': jsonData }, headers=headers, timeout=360)
 
 
             if 'Invalid definition' in r.text:
@@ -1433,7 +1527,7 @@ class AGO():
                 self.logger.info(f'Error was: {r.text}')
                 self.logger.info(f"Posting the index for '{field}'..")
                 headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-                r = requests.post(f'{url}?token={ago_token}', data={'f': 'json', 'addToDefinition': jsonData}, headers=headers,
+                r = requests.post(f'{item_definition_url}?token={self.ago_token}', data={'f': 'json', 'addToDefinition': jsonData}, headers=headers,
                                   timeout=3600)
                 if 'success' not in r.text:
                     self.logger.info('Retry on this index failed. Returned AGO error:')
@@ -1445,13 +1539,19 @@ class AGO():
                 self.logger.info(f'Error was: {r.text}')
                 self.logger.info(f"Posting the index for '{field}'..")
                 headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-                r = requests.post(f'{url}?token={ago_token}', data={'f': 'json', 'addToDefinition': jsonData}, headers=headers,
+                r = requests.post(f'{item_definition_url}?token={self.ago_token}', data={'f': 'json', 'addToDefinition': jsonData}, headers=headers,
                                   timeout=3600)
                 if 'success' not in r.text:
                     self.logger.info('Retry on this index failed. Returned AGO error:')
                     self.logger.info(r.text)
+            elif r.status_code == 200:
+                # Returns a whole lotta stuff on the layer, including index info.
+                #self.logger.info(r.text)
+                self.logger.info('Index posted successfully')
+                pass
             else:
-                self.logger.info(r.text)
+                self.logger.error(f'Did not get expected response code, response code: {r.status_code}')
+                raise AssertionError(f'{r.text}')
 
 
         ################################
@@ -1475,10 +1575,11 @@ class AGO():
         self.logger.info('Checking for missing indexes..')
         self.logger.info('Sleep for 5 minutes first in hopes that index creation finishes by then..')
         sleep(300)
-        check_url = f'https://services.arcgis.com/{self.ago_org_id}/ArcGIS/rest/services/{self.item_name}/FeatureServer/0?f=pjson'
-        self.logger.info(f'Item defintion json URL: {check_url}')
+        item_check_url = self.ago_endpoint_url + '?f=pjson'
+        
+        self.logger.info(f'Item defintion json URL: {item_check_url}')
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        r = requests.get(f'{check_url}&token={ago_token}', headers=headers, timeout=3600)
+        r = requests.get(f'{item_check_url}&token={self.ago_token}', headers=headers, timeout=3600)
         data = r.json()
         # Pull indexes out of the fuater server json definition
         ago_indexes = data['indexes']
