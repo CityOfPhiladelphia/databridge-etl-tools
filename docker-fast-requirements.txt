@@ -64,7 +64,7 @@ jsonpointer==2.3
 jsonschema==4.17.3
 jupyter-client==6.1.12
 jupyter-events==0.6.3
-jupyter-server==1.23.6
+jupyter-server==2.7.2
 jupyter-ydoc==0.2.3
 jupyter_core==5.2.0
 jupyter_server_fileid==0.8.0
