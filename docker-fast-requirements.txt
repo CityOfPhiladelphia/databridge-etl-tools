@@ -113,7 +113,7 @@ ptyprocess==0.7.0
 pure-eval==0.2.2
 pyasn1==0.4.8
 pycparser==2.21
-Pygments==2.14.0
+Pygments==2.15.0
 pyodbc==4.0.32
 pyparsing==3.0.9
 pyproj==3.2.1
