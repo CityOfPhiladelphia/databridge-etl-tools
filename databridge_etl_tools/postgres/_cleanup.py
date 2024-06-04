@@ -3,13 +3,13 @@ import csv
 import psycopg2
 
 def vacuum_analyze(self):
-    self.logger.info('Vacuum analyzing table: {}'.format(self.table_schema_name))
+    self.logger.info('Vacuum analyzing table: {}'.format(self.fully_qualified_table_name))
 
     # An autocommit connection is needed for vacuuming for psycopg2
     # https://stackoverflow.com/questions/1017463/postgresql-how-to-run-vacuum-from-code-outside-transaction-block
     old_isolation_level = self.conn.isolation_level
     self.conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
-    self.execute_sql('VACUUM ANALYZE {};'.format(self.table_schema_name))
+    self.execute_sql('VACUUM ANALYZE {};'.format(self.fully_qualified_table_name))
     self.conn.set_isolation_level(old_isolation_level)
     
     self.logger.info('Vacuum analyze complete.\n')

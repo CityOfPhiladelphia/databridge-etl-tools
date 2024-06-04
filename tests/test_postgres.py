@@ -6,7 +6,6 @@ from .constants import (S3_BUCKET, POINT_TABLE_2272_S3_KEY_CSV,
                         POINT_TABLE_2272_NAME, FIXTURES_DIR, STAGING_DIR, 
                         POINT_TABLE_2272_CSV)
 
-TABLE_SCHEMA = 'citygeo'
 
 @pytest.fixture(scope='module', autouse=True) # Use this fixture without anything calling it
 def write_to_s3(s3_point_csv):
@@ -57,7 +56,7 @@ def pg(connector):
     '''Yield a Postgres Table object'''
     with Postgres(connector=connector,
                   table_name=POINT_TABLE_2272_NAME,
-                  table_schema=TABLE_SCHEMA,
+                  table_schema='citygeo',
                   s3_bucket=S3_BUCKET,
                   s3_key=POINT_TABLE_2272_S3_KEY_CSV, 
                   with_srid=True) as pg_obj:
