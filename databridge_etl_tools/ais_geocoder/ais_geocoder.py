@@ -21,6 +21,7 @@ class AIS_Geocoder():
             query_fields,
             ais_fields,
             remove_fields,
+            srid
             **kwargs):
         
         self.ais_url = ais_url
@@ -33,6 +34,7 @@ class AIS_Geocoder():
         self.ais_fields = ais_fields.split(',')
         self.remove_fields = remove_fields.split(',') if remove_fields else None
         self.csv_path = '/tmp/output.csv'
+        self.srid = srid
 
 
     def ais_inner_geocode(self):
@@ -66,7 +68,7 @@ class AIS_Geocoder():
                     result = None
 
                     if not result:
-                        result = ais_request(self.ais_url, self.ais_key, self.ais_user, query_elements)
+                        result = ais_request(self.ais_url, self.ais_key, self.ais_user, query_elements, self.srid)
 
                     if result and 'features' in result and len(result['features']) > 0:
 
@@ -78,9 +80,16 @@ class AIS_Geocoder():
                                 row[ais_field] = feature['geometry']['coordinates'][1]  if feature['geometry']['coordinates'][0] is not None else ''
                             elif ais_field == 'shape':
                                 coords = feature['geometry']['coordinates']
-                                row[ais_field] = 'SRID=4326;POINT ({x} {y})'.format(x=coords[0], y=coords[1])
+                                row[ais_field] = 'SRID={srid};POINT ({x} {y})'.format(x=coords[0], y=coords[1], srid=self.srid) if coords[0] and coords[1] else ''
+                             elif ais_field == 'geocode_type':
+                                row[ais_field] = feature['geometry']['geocode_type']
+                            elif ais_field == 'normalized':
+                                row[ais_field] = result['normalized']
+                            elif ais_field == 'match_type':
+                                row[ais_field] = feature['match_type']
                             else:
-                                row[ais_field] = feature['properties'][ais_field]
+                                row[ais_field] = feature['properties'][ais_field] if feature['properties'].get(ais_field, '') else ''
+
                     else:
                         print('Could not geocode "{}"'.format(query_elements))
                         errors += 1
