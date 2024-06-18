@@ -14,6 +14,7 @@ import click
 @click.option('--query-fields', help='Fields to query AIS with, comma separated. They are concatenated in order.')
 @click.option('--ais-fields', help='AIS fields to include in the output, comma separated.')
 @click.option('--remove-fields', help='Fields to remove post AIS query, comma separated.')
+@click.option('--srid', default=4326, type=int, help='SRID of geom to request.')
 def ais_geocoder(ctx, **kwargs):
     "Run geocoding or grabs additional fields from AIS"
     ctx.obj = AIS_Geocoder(**kwargs)
