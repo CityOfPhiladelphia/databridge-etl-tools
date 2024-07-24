@@ -1,6 +1,7 @@
 import csv, sys, re, ast
 import psycopg2.sql as sql
 import geopetl
+import pytz
 import petl as etl
 from .postgres_connector import Postgres_Connector
 
@@ -23,7 +24,7 @@ class Postgres():
     from ._properties import (
         csv_path, temp_csv_path, json_schema_path, json_schema_s3_key, 
         export_json_schema, primary_keys, pk_constraint_name, table_self_identifier, 
-        fields, geom_field, geom_type)
+        fields, fields_and_types, geom_field, geom_type, database_object_type)
     from ._s3 import (get_csv_from_s3, get_json_schema_from_s3, load_csv_to_s3, 
                       load_json_schema_to_s3)
     from ._cleanup import (vacuum_analyze, cleanup, check_remove_nulls)
@@ -36,9 +37,8 @@ class Postgres():
         self.conn = self.connector.conn
         self.table_name = table_name
         self.table_schema = table_schema
-        self.table_schema_name = f'{self.table_schema}.{self.table_name}'
+        self.fully_qualified_table_name = f'{self.table_schema}.{self.table_name}'
         self.temp_table_name = self.table_name + '_t'
-        self.temp_table_schema_name = f'{self.table_schema}.{self.temp_table_name}'
         self.s3_bucket = kwargs.get('s3_bucket', None)
         self.s3_key = kwargs.get('s3_key', None)
         self.geom_field = kwargs.get('geom_field', None)
@@ -50,6 +50,7 @@ class Postgres():
         self._primary_keys = None
         self._pk_constraint_name = None
         self._fields = None
+        self._database_object_type = None
 
         # First make sure the table exists: 
         if self.table_schema == None: # If no schema provided, assume the table is TEMPORARY
@@ -57,7 +58,7 @@ class Postgres():
             logger_statement = f'TEMPORARY table {self.table_name}'
         else: 
             assert_statement = f'Table {self.table_schema}.{self.table_name} does not exist in this DB'
-            logger_statement = f'table {self.table_schema_name}'
+            logger_statement = f'table {self.fully_qualified_table_name}'
         
         if table_name != None: # If no table name was provided, don't bother with checking
             assert self.check_exists(self.table_name, self.table_schema), assert_statement
@@ -98,7 +99,7 @@ class Postgres():
         else: # An exception was raised before __exit__()
             self.logger.error('Workflow failed... rolling back database transactions.\n')
             self.conn.rollback()
-            self.cleanup() 
+            self.cleanup()
 
     def check_exists(self, table_name: str, schema_name:str) -> bool: 
         '''Check if a table exists, returning True or False. 
@@ -284,7 +285,7 @@ class Postgres():
                 self.table_self_identifier), 
             fetch='many')
         count = data[0][0]
-        self.logger.info(f'{self.table_schema_name} current row count: {count:,}\n')
+        self.logger.info(f'{self.fully_qualified_table_name} current row count: {count:,}\n')
         return count
 
     def extract(self, return_data:bool=False):
@@ -299,7 +300,7 @@ class Postgres():
         """
         row_count = self.get_row_count()
         
-        self.logger.info(f'Starting extract from {self.table_schema_name}')
+        self.logger.info(f'Starting extract from {self.fully_qualified_table_name}')
         self.logger.info(f'Rows to extract: {row_count}')
         self.logger.info("Note: petl can cause log messages to seemingly come out of order.")
         
@@ -318,25 +319,33 @@ class Postgres():
 
         self.logger.info('Initializing data var with etl.frompostgis()..')
         if self.with_srid is True:
-            rows = etl.frompostgis(self.conn, self.table_schema_name, geom_with_srid=True)
+            rows = etl.frompostgis(self.conn, self.fully_qualified_table_name, geom_with_srid=True)
         else:
-            rows = etl.frompostgis(self.conn, self.table_schema_name, geom_with_srid=False)
+            rows = etl.frompostgis(self.conn, self.fully_qualified_table_name, geom_with_srid=False)
 
         num_rows_in_csv = rows.nrows()
-
         if num_rows_in_csv == 0:
             raise AssertionError('Error! Dataset is empty? Line count of CSV is 0.')
+
+        # Find datetime fields so we can make everything timezone aware if it's naive.. This is important for Carto.
+        datetime_fields = []
+        # Do not use etl.typeset to determine data types because otherwise it causes geopetl to
+        # read the database multiple times
+        for field in self.fields_and_types: 
+            # Create list of datetime type fields that aren't timezone aware:
+            if ('timestamp' in field[1].lower() or 'date' in field[1].lower()) and \
+                ('tz' not in field[1].lower() and 'with time zone' not in field[1].lower()):
+                datetime_fields.append(field[0].lower())
+
+        if datetime_fields:
+            self.logger.info(f'\nConverting {datetime_fields} fields to Eastern timezone datetime\n')
+            rows_new = etl.convert(rows, datetime_fields, pytz.timezone('US/Eastern').localize)
+            # Replace rows with our converted object
+            rows = rows_new
 
         self.logger.info(f'Asserting counts match between db and extracted csv')
         self.logger.info(f'{row_count} == {num_rows_in_csv}')
         assert row_count == num_rows_in_csv
-
-                
-        # New assert as well that will fail if row_count doesn't equal CSV again (because of time difference)
-        db_newest_row_count = self.get_row_count()
-        self.logger.info(f'Asserting counts match between current db count and extracted csv')
-        self.logger.info(f'{db_newest_row_count} == {num_rows_in_csv}')
-        assert db_newest_row_count == num_rows_in_csv
         
         if return_data: 
             return rows
@@ -348,6 +357,12 @@ class Postgres():
         except UnicodeError:
             self.logger.warning("Exception encountered trying to extract to CSV with utf-8 encoding, trying latin-1...")
             rows.progress(interval).tocsv(self.csv_path, 'latin-1')
+
+        # New assert as well that will fail if row_count doesn't equal CSV again (because of time difference)
+        db_newest_row_count = self.get_row_count()
+        self.logger.info(f'Asserting counts match between current db count and extracted csv')
+        self.logger.info(f'{db_newest_row_count} == {num_rows_in_csv}')
+        assert db_newest_row_count == num_rows_in_csv
 
         self.check_remove_nulls()
         self.load_csv_to_s3(path=self.csv_path)
@@ -610,9 +625,9 @@ class Postgres():
         only the columns whose headers differ between the data file and the database 
         table need to be included. All column names must be quoted. 
         '''
-        self.logger.info(f'Upserting into {self.table_schema_name}\n')
+        self.logger.info(f'Upserting into {self.fully_qualified_table_name}\n')
         if self.primary_keys == set(): 
-            raise ValueError(f'Upsert method requires that table "{self.table_schema_name}" have at least one column as primary key.')
+            raise ValueError(f'Upsert method requires that table "{self.fully_qualified_table_name}" have at least one column as primary key.')
         mapping_dict = self._make_mapping_dict(column_mappings, mappings_file)
         
         if method == 'csv': 
