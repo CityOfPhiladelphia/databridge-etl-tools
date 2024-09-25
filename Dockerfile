@@ -45,6 +45,9 @@ RUN set -ex \
     && apt-get update -yqq \
     && apt-get install -yqq --no-install-recommends \
         $buildDeps \
+        krb5-dev \
+        libproj-dev \
+        python3-pyproj \
         libpq-dev \
         netbase \
         apt-utils \
