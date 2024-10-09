@@ -8,6 +8,7 @@ import petl as etl
 import geopetl
 import json
 import hashlib
+import re
 
 
 
@@ -174,6 +175,50 @@ class Oracle():
                     writer.writerows(reader)
             os.replace(temp_file, self.csv_path)
 
+    def has_m_or_z(self):
+        # Assume innocence until proven guilty
+        m = False
+        z = False
+        cursor = self.conn.cursor()
+
+        has_m_or_z_stmt = f'''
+        SELECT definition FROM sde.gdb_items
+        WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
+        '''
+        print('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
+        cursor.execute(has_m_or_z_stmt)
+        result = cursor.fetchone()
+
+        if not result:
+            print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+        else:
+            xml_def = result[0]
+            if not xml_def:
+                print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+            else:
+                m_search = re.search("<HasM>\D*<\/HasM>", xml_def)
+                if not m_search:
+                    #print('No <HasM> element found in xml definition, assuming False.')
+                    pass
+                else:
+                    if 'true' in m_search[0]:
+                        print(m_search[0])
+                        m = True
+                z_search = re.search("<HasZ>\D*<\/HasZ>", xml_def)
+                if not z_search:
+                    #print('No <HasZ> element found in xml definition, assuming False.')
+                    pass
+                else:
+                    if 'true' in z_search[0]:
+                        print(z_search[0])
+                        z = True
+
+        if m or z:
+            return True
+        else:
+            return False
+        
+
     def extract(self):
         '''
         Extract data from database and save as a CSV file. Any fields that contain 
@@ -188,9 +233,49 @@ class Oracle():
         self.logger.info('Note: petl can cause log messages to seemingly come out of order.')
         import geopetl
 
+        # Insert as a function within this function to it can be called easily by petl
+        def mz_to_xy(shape):
+            # Check if the shape includes an SRID (Extended WKT format)
+            srid = ''
+            if shape.startswith('SRID='):
+                srid, shape = shape.split(';', 1)  # Separate SRID from the shape part
+                srid += ';'  # Retain SRID for later
+            
+            # Extract the geometry type (e.g., LINESTRING, MULTILINESTRING)
+            # Split the type from the rest of the coordinates
+            xy_type = shape.split('(', 1)[0].strip()
+            # Remove any Z, M, ZM, or MZ suffix from the geometry type
+            xy_type = re.sub(r'\s?[ZM]+$', '', xy_type)
+
+            # The rest of the shape after the geometry type, and remove any Z or M that could stil exist.
+            shape_coords = shape[len(xy_type):].strip().replace('Z','').replace('M','').replace('ZM','').replace('MZ','')
+
+            # Function to remove M and Z values from coordinate strings
+            def process_coords(coords_str):
+                # Using regular expressions to match only X and Y coordinates, ignoring M and Z
+                coords = re.findall(r'-?\d+\.\d+', coords_str)
+                # Group coordinates into pairs (x, y) by skipping M and Z values
+                return ', '.join(' '.join(coords[i:i + 2]) for i in range(0, len(coords), 3))
+
+            # Match each nested set of parentheses to properly handle geometries
+            def process_shape(wkt_str):
+                return re.sub(r'\(([^()]*)\)', lambda m: f"({process_coords(m.group(1))})", wkt_str)
+            
+            # Process the main geometry
+            xy_wkt = process_shape(shape_coords)
+
+            # Return the EWKT if SRID exists, otherwise just the WKT
+            return srid + xy_type + xy_wkt
+
+
         # Note: data isn't read just yet at this point
         self.logger.info('Initializing data var with etl.fromoraclesde()..')
         data = etl.fromoraclesde(self.conn, self.schema_table_name, geom_with_srid=True)
+
+        if self.has_m_or_z:
+            print('Table has M or Z values, converting to XY..')
+            data = data.convert('shape', lambda v: mz_to_xy(v) if v else None)
+
         self.logger.info('Initialized.')
 
 
@@ -230,8 +315,8 @@ class Oracle():
                 etl.tocsv(data.progress(interval), self.csv_path, encoding='latin-1')
 
         # Used solely in pytest to ensure database is called only once.
-        self.times_db_called = data.times_db_called
-        self.logger.info(f'Times database queried: {self.times_db_called}')
+        #self.times_db_called = data.times_db_called
+        #self.logger.info(f'Times database queried: {self.times_db_called}')
 
         # Confirm CSV isn't empty
         try:
@@ -264,8 +349,14 @@ class Oracle():
         self.logger.info(f'{recent_row_count} == {num_rows_in_csv}')
         assert recent_row_count == num_rows_in_csv, f'Row counts dont match!! recent row count: {recent_row_count}, csv : {self.num_rows_in_csv}'
 
-        self.load_csv_to_s3()
-        os.remove(self.csv_path)
+        if self.s3_bucket and self.s3_key:
+            self.load_csv_to_s3()
+            os.remove(self.csv_path)
+        else:
+            self.logger.info('Saving CSV to working directory..')
+            # Move CSV out of temp path in self.csv_path and place in the current working directory
+            os.replace(self.csv_path, os.path.join(os.getcwd(), self.table_name + '.csv'))
+            
     
         self.logger.info('Successfully extracted from {}'.format(self.schema_table_name))
 

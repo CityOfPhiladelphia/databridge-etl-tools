@@ -11,8 +11,8 @@ import click
 @click.option('--connection_string', required=True)
 @click.option('--table_name', required=True)
 @click.option('--table_schema', required=True)
-@click.option('--s3_bucket')
-@click.option('--s3_key')
+@click.option('--s3_bucket', required=False)
+@click.option('--s3_key', required=False)
 def postgres(ctx, **kwargs):
     '''Run ETL commands for Postgres'''
     ctx.obj = {}
