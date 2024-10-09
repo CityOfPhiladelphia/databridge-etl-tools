@@ -8,6 +8,7 @@ import petl as etl
 import geopetl
 import json
 import hashlib
+import re
 
 
 
@@ -174,6 +175,50 @@ class Oracle():
                     writer.writerows(reader)
             os.replace(temp_file, self.csv_path)
 
+    def has_m_or_z(self):
+        # Assume innocence until proven guilty
+        m = False
+        z = False
+        cursor = self.conn.cursor()
+
+        has_m_or_z_stmt = f'''
+        SELECT definition FROM sde.gdb_items
+        WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
+        '''
+        print('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
+        cursor.execute(has_m_or_z_stmt)
+        result = cursor.fetchone()
+
+        if not result:
+            print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+        else:
+            xml_def = result[0]
+            if not xml_def:
+                print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+            else:
+                m_search = re.search("<HasM>\D*<\/HasM>", xml_def)
+                if not m_search:
+                    #print('No <HasM> element found in xml definition, assuming False.')
+                    pass
+                else:
+                    if 'true' in m_search[0]:
+                        print(m_search[0])
+                        m = True
+                z_search = re.search("<HasZ>\D*<\/HasZ>", xml_def)
+                if not z_search:
+                    #print('No <HasZ> element found in xml definition, assuming False.')
+                    pass
+                else:
+                    if 'true' in z_search[0]:
+                        print(z_search[0])
+                        z = True
+
+        if m or z:
+            return True
+        else:
+            return False
+        
+
     def extract(self):
         '''
         Extract data from database and save as a CSV file. Any fields that contain 
@@ -188,9 +233,21 @@ class Oracle():
         self.logger.info('Note: petl can cause log messages to seemingly come out of order.')
         import geopetl
 
+        def mz_to_xy(self, shape):
+            mzxy_val = shape.split(' (')[1].replace(')', '')
+            xy_val = [(item.split()[0], item.split()[1]) for item in mzxy_val.split(',')]
+            xy_type = shape.split(' ')[0]
+            xy_wkt = xy_type + ' ( ' + ', '.join([' '.join(item) for item in xy_val]) + ' )'
+            return xy_wkt
+
         # Note: data isn't read just yet at this point
         self.logger.info('Initializing data var with etl.fromoraclesde()..')
         data = etl.fromoraclesde(self.conn, self.schema_table_name, geom_with_srid=True)
+
+        if self.has_m_or_z:
+            print('Table has M or Z values, converting to XY..')
+            data = data.convert('shape', lambda v: mz_to_xy(v) if v else None)
+
         self.logger.info('Initialized.')
 
 
@@ -230,8 +287,8 @@ class Oracle():
                 etl.tocsv(data.progress(interval), self.csv_path, encoding='latin-1')
 
         # Used solely in pytest to ensure database is called only once.
-        self.times_db_called = data.times_db_called
-        self.logger.info(f'Times database queried: {self.times_db_called}')
+        #self.times_db_called = data.times_db_called
+        #self.logger.info(f'Times database queried: {self.times_db_called}')
 
         # Confirm CSV isn't empty
         try:
