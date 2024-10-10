@@ -7,8 +7,8 @@ import click
 @click.option('--table_name', required=True)
 @click.option('--table_schema', required=True)
 @click.option('--connection_string', required=True)
-@click.option('--s3_bucket', required=True)
-@click.option('--s3_key', required=True)
+@click.option('--s3_bucket', required=False)
+@click.option('--s3_key', required=False)
 def oracle(ctx, **kwargs):
     '''Run ETL commands for Oracle'''
     ctx.obj = Oracle(**kwargs)

@@ -1,4 +1,4 @@
-import csv, sys, re, ast
+import csv, os, sys, re, ast
 import psycopg2.sql as sql
 import geopetl
 import pytz
@@ -362,7 +362,15 @@ class Postgres():
         assert db_newest_row_count == num_rows_in_csv
 
         self.check_remove_nulls()
-        self.load_csv_to_s3(path=self.csv_path)
+
+        if self.s3_bucket and self.s3_key:
+            self.load_csv_to_s3(path=self.csv_path)
+        else:
+            self.logger.info('Saving CSV to local working directory.')
+            # Move CSV out of temp path in self.csv_path and place in the current working directory
+            os.replace(self.csv_path, os.path.join(os.getcwd(), self.table_name + '.csv'))
+            
+        
     
     def create_temp_table(self): 
         '''Create an empty temp table from self.table_name in the same schema'''
