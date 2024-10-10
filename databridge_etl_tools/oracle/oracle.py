@@ -181,9 +181,31 @@ class Oracle():
         z = False
         cursor = self.conn.cursor()
 
+        # Ran into a situation where somehow we evaluate to true anyway, so check if shape field actually exists first
+        field_names = [ x[0].lower() for x in self.fields ]
+        if 'shape' not in field_names:
+            return False
+        else:
+            # select a non-null shape field to check if it has M or Z values
+            # Oracle is dumb and doesn't have a LIMIT clause, so we have to do this
+            select_shape_stmt = f'''select * from  (SELECT sde.st_astext(shape) FROM {self.table_schema}.{self.table_name} WHERE sde.st_isempty(shape) = 0) WHERE ROWNUM <= 10'''
+            print(select_shape_stmt)
+            cursor.execute(select_shape_stmt)
+            a_shape = cursor.fetchone()[0]
+            print(a_shape)
+            if a_shape.startswith('SRID='):
+                srid, shape = shape.split(';', 1)  # Separate SRID from the shape part
+                srid += ';'  # Retain SRID for later
+            
+                # Extract the geometry type (e.g., LINESTRING, MULTILINESTRING)
+                # Split the type from the rest of the coordinates
+                xy_type = shape.split('(', 1)[0].strip()
+                print(xy_type)
+                raise
+
         has_m_or_z_stmt = f'''
         SELECT definition FROM sde.gdb_items
-        WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
+        WHERE upper(name) = '{self.table_schema}.{self.table_name}'
         '''
         print('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
         cursor.execute(has_m_or_z_stmt)
@@ -193,6 +215,8 @@ class Oracle():
             print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
         else:
             xml_def = result[0]
+            print('DEBUG')
+            print(xml_def)
             if not xml_def:
                 print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
             else:
@@ -272,12 +296,12 @@ class Oracle():
         self.logger.info('Initializing data var with etl.fromoraclesde()..')
         data = etl.fromoraclesde(self.conn, self.schema_table_name, geom_with_srid=True)
 
-        if self.has_m_or_z:
-            print('Table has M or Z values, converting to XY..')
-            data = data.convert('shape', lambda v: mz_to_xy(v) if v else None)
+        # Comment this out for now, doesn't work. Alex tells me he will rework in geopetl.
+        #if self.has_m_or_z():
+        #    print('Table has M or Z values, converting to XY..')
+        #    data = data.convert('shape', lambda v: mz_to_xy(v) if v else None)
 
         self.logger.info('Initialized.')
-
 
         datetime_fields = []
         # Do not use etl.typeset to determine data types because otherwise it causes geopetl to
