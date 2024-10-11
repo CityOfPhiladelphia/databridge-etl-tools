@@ -28,7 +28,7 @@ class Oracle():
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
         self.times_db_called = 0
-        self.nonoid_fields_w_objectid = ['addressobjectid']
+        self.nonoid_fields_w_objectid = ['addressobjectid', 'eclipse_addressobjectid']
         # just initialize this self variable here so we connect first
         self.conn
 
