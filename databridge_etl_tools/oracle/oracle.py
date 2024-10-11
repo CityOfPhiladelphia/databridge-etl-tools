@@ -309,8 +309,8 @@ class Oracle():
                         FROM all_tab_cols
                         WHERE table_name = '{self.table_name.upper()}'
                         AND owner  = '{self.table_schema.upper()}'
-                        AND column_name not like 'SYS_%'
-                        AND (column_name not like '%OBJECTID%' or column_name in ({','.join([ f.upper() for f in self.nonoid_fields_w_objectid])}))
+                        AND column_name not like 'SYS\_%' ESCAPE '\\'
+                        AND (column_name not like '%OBJECTID%' or column_name in ('{','.join([ f.upper() for f in self.nonoid_fields_w_objectid])}'))
                         '''
         cursor.execute(cols_stmt)
         cols = cursor.fetchall()[0][0]
@@ -336,9 +336,9 @@ class Oracle():
                         WHERE table_name = '{self.table_name.upper()}'
                         AND owner  = '{self.table_schema.upper()}'
                         AND column_name like '%OBJECTID%'
-                        AND column_name not in ({','.join(self.nonoid_fields_w_objectid.upper())})
+                        AND column_name not in ('{','.join([ f.upper() for f in self.nonoid_fields_w_objectid])}')
                         '''
-        cursor.execute(cols_stmt)
+        cursor.execute(oid_stmt)
         oids = cursor.fetchall()[0][0]
         sde_registered = False
         if 'OBJECTID_' in oids:
