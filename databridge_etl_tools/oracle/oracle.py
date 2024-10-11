@@ -305,13 +305,15 @@ class Oracle():
 
         # Get columns from prod oracle table
         cursor = self.conn.cursor()
-        cols_stmt = f'''SELECT LISTAGG(column_name, ', ') WITHIN GROUP (ORDER BY column_id)
-                        FROM all_tab_cols
-                        WHERE table_name = '{self.table_name.upper()}'
-                        AND owner  = '{self.table_schema.upper()}'
-                        AND column_name not like 'SYS\_%' ESCAPE '\\'
-                        AND (column_name not like '%OBJECTID%' or column_name in ('{','.join([ f.upper() for f in self.nonoid_fields_w_objectid])}'))
-                        '''
+        cols_stmt = f'''
+		SELECT LISTAGG(column_name, ', ') 
+		WITHIN GROUP (ORDER BY column_id)
+        FROM all_tab_cols
+        WHERE table_name = '{self.table_name.upper()}'
+        AND owner  = '{self.table_schema.upper()}'
+        AND column_name not like 'SYS\_%' ESCAPE '\\'
+        AND (column_name not like '%OBJECTID%' or column_name in ({','.join(["'" + f.upper() + "'" for f in self.nonoid_fields_w_objectid])}))
+            '''
         cursor.execute(cols_stmt)
         cols = cursor.fetchall()[0][0]
         assert cols, f'Could not fetch columns, does the table exist?\n Statement: {cols_stmt}'
