@@ -28,6 +28,7 @@ class Oracle():
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
         self.times_db_called = 0
+        self.nonoid_fields_w_objectid = ['addressobjectid']
         # just initialize this self variable here so we connect first
         self.conn
 
@@ -392,6 +393,7 @@ class Oracle():
                         WHERE table_name = '{self.table_name.upper()}'
                         AND owner  = '{self.table_schema.upper()}'
                         AND column_name not like 'SYS_%'
+                        AND (column_name not like '%OBJECTID%' or column_name in ({','.join(self.nonoid_fields_w_objectid.upper())}))
                         '''
         cursor.execute(cols_stmt)
         cols = cursor.fetchall()[0][0]
@@ -412,14 +414,21 @@ class Oracle():
         srid = response[0] if response else None
 
         # Detect if registered through existence of objectid column
+        oid_stmt = f'''SELECT LISTAGG(column_name, ', ') WITHIN GROUP (ORDER BY column_id)
+                        FROM all_tab_cols
+                        WHERE table_name = '{self.table_name.upper()}'
+                        AND owner  = '{self.table_schema.upper()}'
+                        AND column_name like '%OBJECTID%'
+                        AND column_name not in ({','.join(self.nonoid_fields_w_objectid.upper())})
+                        '''
+        cursor.execute(cols_stmt)
+        oids = cursor.fetchall()[0][0]
         sde_registered = False
-        if 'OBJECTID_' in cols:
+        if 'OBJECTID_' in oids:
             raise AssertionError('Nonstandard OBJECTID columm detected! Please correct your objectid column to be named just "OBJECTID"!!')
-        if 'OBJECTID' in cols:
+        if 'OBJECTID' in oids:
             sde_registered = True
             print('objectid found, assuming sde registered.')
-            cols = cols.replace('OBJECTID,', '')
-            cols = cols.replace(', OBJECTID', '')
 
         # Create a temp table name exactly 30 characters in length so we don't go over oracle 11g's table name limit
         # and then hash it so that it's unique to our table name.
