@@ -343,11 +343,12 @@ class Oracle():
         cursor.execute(oid_stmt)
         oids = cursor.fetchall()[0][0]
         sde_registered = False
-        if 'OBJECTID_' in oids:
-            raise AssertionError('Nonstandard OBJECTID columm detected! Please correct your objectid column to be named just "OBJECTID"!!')
-        if 'OBJECTID' in oids:
-            sde_registered = True
-            print('objectid found, assuming sde registered.')
+        if oids:
+            if 'OBJECTID_' in oids:
+                raise AssertionError('Nonstandard OBJECTID columm detected! Please correct your objectid column to be named just "OBJECTID"!!')
+            if 'OBJECTID' in oids:
+                sde_registered = True
+                print('objectid found, assuming sde registered.')
 
         # Create a temp table name exactly 30 characters in length so we don't go over oracle 11g's table name limit
         # and then hash it so that it's unique to our table name.
