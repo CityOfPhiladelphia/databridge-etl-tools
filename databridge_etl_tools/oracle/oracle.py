@@ -374,7 +374,17 @@ class Oracle():
             cursor.execute(tmp_tbl_stmt)
             cursor.execute('COMMIT')
             tmp_table_made = True
-            
+        except Exception as e:
+            # Sometimes the table already exists for some reason... truncate it if so.
+            if 'already exists' in str(e) or 'name is already used by an existing object' in str(e):
+                print('Temp table already exists? truncating..')
+                cursor.execute(f'TRUNCATE TABLE {temp_table_name}')
+                cursor.execute('COMMIT')
+                tmp_table_made = False
+            else:
+                raise e
+        
+        try:
             # Replace empty strings with None (which corresponds to NULL in databases)
             #rows = etl.convert(rows, {field: lambda v: 'NULL' if v == '' else v for field in etl.header(rows)})
             
@@ -423,4 +433,12 @@ class Oracle():
             if tmp_table_made or 'name is already used by an existing object' in str(e):
                 cursor.execute(f'DROP TABLE {temp_table_name}')
                 cursor.execute('COMMIT')
-            raise e 
+            raise e
+        
+        # Failsafe try to drop the temp table no matter what, and don't fail if it doesn't exist
+        try:
+            cursor.execute(f'DROP TABLE {temp_table_name}')
+            cursor.execute('COMMIT')
+        except Exception as e:
+            if 'table or view does not exist' in str(e):
+                pass
