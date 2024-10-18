@@ -571,18 +571,18 @@ class Db2():
         #    self.pg_cursor.execute('COMMIT')
 
         # Manually run a vacuum on our tables for database performance
-        self.pg_cursor.execute(f'VACUUM VERBOSE {self.enterprise_schema}.{self.enterprise_dataset_name}')
+        self.pg_cursor.execute(f'VACUUM VERBOSE {prod_table}')
         self.pg_cursor.execute('COMMIT')
 
         # Run a quick select statement to test, use objectid if available
         if oid_column:
             select_test_stmt = f'''
-            SELECT * FROM {self.enterprise_schema}.{self.enterprise_dataset_name} WHERE {oid_column} IS NOT NULL LIMIT 1
+            SELECT * FROM {prod_table} WHERE {oid_column} IS NOT NULL LIMIT 1
             '''
         # Else bare select
         else:
             select_test_stmt = f'''
-            SELECT * FROM {self.enterprise_schema}.{self.enterprise_dataset_name} LIMIT 1
+            SELECT * FROM {prod_table} LIMIT 1
             '''
         self.logger.info("Running select_test_stmt: " + str(select_test_stmt))
 
@@ -591,6 +591,17 @@ class Db2():
         self.logger.info('Result of select test:')
         self.logger.info(str(result))
         assert result
+
+
+        self.logger.info('\nTriple-checking row counts..')
+        self.pg_cursor.execute(f'select count(*) from {prod_table}')
+        dest_count = self.pg_cursor.fetchone()[0]
+        self.pg_cursor.execute(f'select count(*) from {stage_table}')
+        source_count = self.pg_cursor.fetchone()[0]
+        stage_table
+        print(f'Source count: {source_count}, dest_count: {dest_count}')
+        assert source_count == dest_count
+
         print('Success!')
 
     def update_oracle_scn(self):
