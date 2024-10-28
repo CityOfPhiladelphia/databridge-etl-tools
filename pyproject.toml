@@ -9,7 +9,7 @@ py_modules = ['databridge_etl_tools']
 
 [project]
 name = "databridge-etl-tools"
-version = "1.3.5"
+version = "1.3.6"
 description = "Command line tools to extract and load SQL data to various endpoints"
 authors = [
     {name = "citygeo", email = "maps@phila.gov"},

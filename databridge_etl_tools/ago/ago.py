@@ -119,21 +119,26 @@ class AGO():
     @property
     def item(self):
         '''Find the AGO object that we can perform actions on, sends requests to it's AGS endpoint in AGO.
-        Contains lots of attributes we'll need to access throughout this script.'''
+        Contains lots of attributes we'll need to access throughout this script.
+        Note: your item name needs to match the back-end service name of the AGO item exactly!!'''
         if self._item is None:
             try:
                 # "Feature Service" seems to pull up both spatial and table items in AGO
                 assert self.item_name.strip()
-                search_query = f'''owner:"{self.ago_user}" AND title:"{self.item_name}" AND type:"Feature Service"'''
+                search_query = f'''name:"{self.item_name}" AND type:"Feature Service"'''
                 self.logger.info(f'Searching for item with query: {search_query}')
                 items = self.org.content.search(search_query, outside_org=False)
+                if len(items) > 1:
+                    print('Got multiple items back from our search.')
+                    for item in items:
+                        print(f'Item service name: {item.name}, Item ID: {item.id}')
                 for item in items:
                     # For items with spaces in their titles, AGO will smartly change out spaces to underscores
                     # Test for this too.
-                    self.logger.info(f'Seeing if item title is a match: "{item.title}" to "{self.item_name}"..')
-                    if (item.title.lower() == self.item_name.lower()) or (item.title == self.item_name.replace(' ', '_')):
+                    self.logger.info(f'Seeing if item service name is a match: "{item.name}" to "{self.item_name}"..')
+                    if item.name == self.item_name:
                         self._item = item
-                        self.logger.info(f'Found item, url and id: {self.item.url}, {self.item.id}')
+                        self.logger.info(f'Chosen item name: {self.item.name}, id: {self.item.id}, url: {self.item.url}')
                         return self._item
                 # If item is still None, then fail out
                 if self._item is None:
