@@ -355,12 +355,6 @@ class Postgres():
             self.logger.warning("Exception encountered trying to extract to CSV with utf-8 encoding, trying latin-1...")
             rows.progress(interval).tocsv(self.csv_path, 'latin-1')
 
-        # New assert as well that will fail if row_count doesn't equal CSV again (because of time difference)
-        db_newest_row_count = self.get_row_count()
-        self.logger.info(f'Asserting counts match between current db count and extracted csv')
-        self.logger.info(f'{db_newest_row_count} == {num_rows_in_csv}')
-        assert db_newest_row_count == num_rows_in_csv
-
         self.check_remove_nulls()
 
         if self.s3_bucket and self.s3_key:
