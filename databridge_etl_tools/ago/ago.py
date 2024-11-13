@@ -80,6 +80,16 @@ class AGO():
         if self.clean_columns == 'False':
             self.clean_columns = None
 
+
+    # Make these 2 blank functions so AGO class can be instantiated directly in python if need be
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+
     @property
     def logger(self):
         if self._logger is None:
