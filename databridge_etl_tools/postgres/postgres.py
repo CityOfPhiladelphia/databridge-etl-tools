@@ -179,6 +179,9 @@ class Postgres():
             # Remove our temporary column
             rows = rows.cutout('row_geom_type')
 
+            # Replace nulls that aren't Postgres-compatible (NEW Nov. 2024)
+            rows = rows.convert(self.geom_field, lambda x: re.sub(r'(1\.#QNAN000|NULL)', 'NaN', x) if isinstance(x, str) else x)
+
         header = rows[0]
         str_header = ', '.join(header)
         if mapping_dict != None: 
