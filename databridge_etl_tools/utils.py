@@ -12,7 +12,7 @@ def force_2d(wkt: str) -> str:
     # TODO: Consider how to return captured Z and M values, to be put on the table as new columns if they are substantively meaningful
 
     # remove Z, M, or ZM label from shape type
-    SHAPE_TYPE_RE = r'(?P<shapetype>\w+)(?P<zm> ZM?| Z| M)?\('
+    SHAPE_TYPE_RE = r'(?P<shapetype>\w+)(?P<zm> ZM?| Z| M)?\s*\('
     wkt = re.sub(SHAPE_TYPE_RE, r'\1(', wkt)
 
     # capture x and y coordinates; also capture z and m coordinates if present (each match is one point within the shape)
