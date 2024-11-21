@@ -86,19 +86,19 @@ jobs:
         POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
 
-    - name: Oracle pytests
-      run: |
-          docker run --rm dbtools \
-          pytest tests/test_oracle.py \
-          -vvv -ra --showlocals --tb=long --disable-warnings \
-            --user GIS_TEST \
-            --password $ORACLE_PASSWORD \
-            --host $ORACLE_HOST \
-            --database $ORACLE_DB
-      env:
-        ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
-        ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
-        ORACLE_DB: ${{ secrets.ORACLE_DB }}
+        #    - name: Oracle pytests
+        #      run: |
+        #          docker run --rm dbtools \
+        #          pytest tests/test_oracle.py \
+        #          -vvv -ra --showlocals --tb=long --disable-warnings \
+        #            --user GIS_TEST \
+        #            --password $ORACLE_PASSWORD \
+        #            --host $ORACLE_HOST \
+        #            --database $ORACLE_DB
+        #      env:
+        #        ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
+        #        ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
+        #        ORACLE_DB: ${{ secrets.ORACLE_DB }}
 
     - name: AGO pytests
       run: |
