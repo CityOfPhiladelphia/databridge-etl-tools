@@ -203,6 +203,68 @@ class Postgres():
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
 
+    def _is_registered(self) -> bool:
+        """Check if the table is registered. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
+        with self.conn.cursor() as cursor:
+            stmt1 = f"select registration_id FROM sde.sde_table_registry where table_name = '{self.table_name}' and schema = '{self.table_schema}';"
+            stmt2 = f"select objectid FROM sde.gdb_items where lower(name) = 'databridge.{self.table_schema}.{self.table_name}';"
+            cursor.execute(stmt1)
+            registered_one = cursor.fetchone()
+            cursor.execute(stmt2)
+            registered_two = cursor.fetchone()
+            if registered_one and registered_two:
+                return True
+            # Both should be true or both should be false, otherwise this table is partially registered and we should
+            # clean up. Check out the postgres function public.force_drop_sde_table to see what tables to look at.
+            elif registered_one or registered_two:
+                raise AssertionError('Inconsistent registration detected! Please clean up SDE tables for this table.')
+            else:
+                return False
+    
+    def _is_m_or_z_enabled(self) -> bool:
+        """Check if a table is enabled for M- or Z- values. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
+        if not self._is_registered():
+            return False
+        
+        print('Checking for z or m values in sde.gdb_items.definition column..')
+        with self.conn.cursor() as cursor:
+            # Assume innocence until proven guilty
+            m = False
+            z = False
+            has_m_or_z_stmt = f'''
+            SELECT definition FROM sde.gdb_items
+            WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
+            '''
+            print('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
+            cursor.execute(has_m_or_z_stmt)
+            result = cursor.fetchone()
+
+            if not result:
+                print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                return False
+            else:
+                xml_def = result[0]
+                if not xml_def:
+                    print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                    return False
+                else:
+                    m_search = re.search("<HasM>\D*<\/HasM>", xml_def)
+                    if not m_search:
+                        print('No <HasM> element found in xml definition, assuming False.')
+                    else:
+                        if 'true' in m_search[0]:
+                            print(m_search[0])
+                            m = True
+                    z_search = re.search("<HasZ>\D*<\/HasZ>", xml_def)
+                    if not z_search:
+                        print('No <HasZ> element found in xml definition, assuming False.')
+                    else:
+                        if 'true' in z_search[0]:
+                            print(z_search[0])
+                            z = True
+
+            return (m or z)
+
     def _make_mapping_dict(self, column_mappings:str = None, mappings_file:str = None) -> dict: 
         '''Transform a string dict or a file with a string dict into that dict'''
         if column_mappings != None: 
@@ -372,8 +434,6 @@ class Postgres():
             self.logger.info('Saving CSV to local working directory.')
             # Move CSV out of temp path in self.csv_path and place in the current working directory
             os.replace(self.csv_path, os.path.join(os.getcwd(), self.table_name + '.csv'))
-            
-        
     
     def create_temp_table(self): 
         '''Create an empty temp table from self.table_name in the same schema'''
