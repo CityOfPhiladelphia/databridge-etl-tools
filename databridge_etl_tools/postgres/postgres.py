@@ -185,7 +185,10 @@ class Postgres():
 
             # Remove Z and/or M information if target table is not enabled for it
             if force2d:
-                if not self._is_m_or_z_enabled():
+                zm_enabled_test = self._is_m_or_z_enabled()
+                if zm_enabled_test:
+                    self.logger.info('Target table is M/Z enabled. Continuing...')
+                else:
                     self.logger.info('Detected that shape needs Z and/or M values removed...')
                     rows = rows.convert(self.geom_field, lambda x: force_2d(x) if isinstance(x, str) else x)
 
