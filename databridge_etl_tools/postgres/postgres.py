@@ -4,6 +4,7 @@ import geopetl
 import pytz
 import petl as etl
 from .postgres_connector import Postgres_Connector
+from ..utils import force_2d
 
 csv.field_size_limit(sys.maxsize)
 
@@ -143,7 +144,7 @@ class Postgres():
     def create_indexes(self, table_name):
         raise NotImplementedError
 
-    def prepare_file(self, file:str, mapping_dict:dict=None):
+    def prepare_file(self, file:str, mapping_dict:dict=None, force2d=True):
         '''
         Prepare a CSV file's geometry and header for insertion into Postgres; 
         write to CSV at self.temp_csv_path. If mapping_dict is not None, no edits 
@@ -181,6 +182,12 @@ class Postgres():
 
             # Replace nulls that aren't Postgres-compatible (NEW Nov. 2024)
             rows = rows.convert(self.geom_field, lambda x: re.sub(r'(1\.#QNAN000|NULL)', 'NaN', x) if isinstance(x, str) else x)
+
+            # Remove Z and/or M information if target table is not enabled for it
+            if force2d:
+                if not self._is_m_or_z_enabled():
+                    self.logger.info('Detected that shape needs Z and/or M values removed...')
+                    rows = rows.convert(self.geom_field, lambda x: force_2d(x) if isinstance(x, str) else x)
 
         header = rows[0]
         str_header = ', '.join(header)
@@ -226,7 +233,7 @@ class Postgres():
         if not self._is_registered():
             return False
         
-        print('Checking for z or m values in sde.gdb_items.definition column..')
+        self.logger.info('Checking for z or m values in sde.gdb_items.definition column..')
         with self.conn.cursor() as cursor:
             # Assume innocence until proven guilty
             m = False
@@ -235,32 +242,32 @@ class Postgres():
             SELECT definition FROM sde.gdb_items
             WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
             '''
-            print('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
+            self.logger.info('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
             cursor.execute(has_m_or_z_stmt)
             result = cursor.fetchone()
 
             if not result:
-                print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                self.logger.info('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
                 return False
             else:
                 xml_def = result[0]
                 if not xml_def:
-                    print('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                    self.logger.info('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
                     return False
                 else:
                     m_search = re.search("<HasM>\D*<\/HasM>", xml_def)
                     if not m_search:
-                        print('No <HasM> element found in xml definition, assuming False.')
+                        self.logger.info('No <HasM> element found in xml definition, assuming False.')
                     else:
                         if 'true' in m_search[0]:
-                            print(m_search[0])
+                            self.logger.info(m_search[0])
                             m = True
                     z_search = re.search("<HasZ>\D*<\/HasZ>", xml_def)
                     if not z_search:
-                        print('No <HasZ> element found in xml definition, assuming False.')
+                        self.logger.info('No <HasZ> element found in xml definition, assuming False.')
                     else:
                         if 'true' in z_search[0]:
-                            print(z_search[0])
+                            self.logger.info(z_search[0])
                             z = True
 
             return (m or z)
