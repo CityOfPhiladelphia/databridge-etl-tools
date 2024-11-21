@@ -331,6 +331,9 @@ class Postgres():
             # f.readline() moves cursor position out of position
             str_header = f.readline().strip().split(',')            
             f.seek(0)
+            # deal with invisible line-starting encoding character 
+            # (without this you may get "psycopg2.errors.UndefinedColumn: column <colname> of relation <table_name> does not exist") at cursor.copy_expert(copy_stmt, f) below
+            str_header = [''.join([char.replace('\ufeff', '') for char in colname]) for colname in str_header] 
 
             with self.conn.cursor() as cursor:
                 cols_composables = []
