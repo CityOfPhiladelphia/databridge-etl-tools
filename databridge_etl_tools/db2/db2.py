@@ -396,6 +396,25 @@ class Db2():
         if oid_column and oid_column != 'objectid':
             self.logger.info(f'Non-standard OID column detected, you should correct this!!: {oid_column}')
 
+
+        # Figure out if the source table is registered and we have a unique situation where source is unregistered
+        # and viewer is registered (using force_viewer_registered yaml key)
+        get_oid_column_stmt = f'''
+            SELECT rowid_column FROM sde.sde_table_registry
+            WHERE table_name = '{self.table_name}' AND schema = '{self.account_name}'
+            '''
+        self.logger.info("Executing get_oid_column_stmt: " + str(get_oid_column_stmt))
+        self.pg_cursor.execute(get_oid_column_stmt)
+        oid_column_return = self.pg_cursor.fetchone()
+        # Will be used later if the table is registered. If it's not registered, set oid_column to None.
+        if oid_column_return:
+            source_oid_column = oid_column_return[0]
+        else:
+            source_oid_column = None
+        if source_oid_column and source_oid_column != 'objectid':
+            self.logger.info(f'Non-standard OID column detected, you should correct this!!: {source_oid_column}')
+        
+
         # Metadata column added into postgres tables by arc programs, often empty, not needed.
         if 'gdb_geomattr_data' in enterprise_columns:
             enterprise_columns.remove('gdb_geomattr_data')
@@ -457,6 +476,8 @@ class Db2():
                 seq_name = seq_name
             if not seq_name:
                 self.logger.info(f'Could not find an objectid sequence, ran statement: \n {seq_stmt}')
+            else:
+                print(f'Found objectid sequence in {self.enterprise_schema} table: {str(seq_name)}')
 
 
         if reg_id and reg_uuid and oid_column:
@@ -503,7 +524,7 @@ class Db2():
         # to make a different objectid than just "objectid" in oracle. This means that the table is initially made
         # without that column, but still an oid column called "objectid". In this rare scenario, the objectid column will be empty.
         if oid_column and not seq_name:
-            null_oid_stmt = f'select {oid_column} from {stage_table} where {oid_column} is not null;'
+            null_oid_stmt = f'select {oid_column} from {prod_table} where {oid_column} is not null;'
             print(f'Checking if {oid_column} col is null...')
             self.pg_cursor.execute(null_oid_stmt)
             result = self.pg_cursor.fetchone()
@@ -517,9 +538,22 @@ class Db2():
                 staging_columns.append(oid_column)
                 enterprise_columns.append(f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')")
             else:
-                staging_columns = enterprise_columns
+                staging_columns = enterprise_columns.copy()
         else:
-            staging_columns = enterprise_columns
+            staging_columns = enterprise_columns.copy()
+
+        # if no objectid in source, but objectid in enterprise, remove all objectid references and use next_rowid if no sequence
+        # This scenario should only be encountered in "force_viewer_registered" DAGs, whereby the source table is unregistered but we want the viewer to be registered.
+        if (not source_oid_column and oid_column) and not seq_name:
+            # Put objectid at end.
+            staging_columns.remove('objectid')
+            staging_columns.append('objectid')
+            enterprise_columns.remove('objectid')
+            enterprise_columns.append(f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')")
+        # For scenarios where we have an objectid sequence on the viewer table, just remove objectid entirely and the database *should* take care of it.
+        elif (not source_oid_column and oid_column) and not seq_name:
+            staging_columns.remove('objectid')
+            staging_columns.remove('objectid')
 
         staging_columns_str = ', '.join(staging_columns)
         enterprise_columns_str = ', '.join(enterprise_columns)
