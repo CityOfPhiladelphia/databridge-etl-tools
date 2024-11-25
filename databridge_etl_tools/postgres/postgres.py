@@ -180,17 +180,27 @@ class Postgres():
             # Remove our temporary column
             rows = rows.cutout('row_geom_type')
 
-            # Replace nulls that aren't Postgres-compatible (NEW Nov. 2024)
-            rows = rows.convert(self.geom_field, lambda x: re.sub(r'(1\.#QNAN000|NULL)', 'NaN', x) if isinstance(x, str) else x)
+            # Check if source table has M/Z values in it (by inspecting first row with non-null shape)
+            nonnull_rows = rows.selectnotnone(self.geom_field)
+            geom_idx = nonnull_rows.header().index(self.geom_field)
+            first_nonnull_shape_row = nonnull_rows[1]
+            first_nonnull_shape = first_nonnull_shape_row[geom_idx]
+            self.logger.info(f"First non-null shape field:\n{first_nonnull_shape}")
+            if force_2d(first_nonnull_shape) == first_nonnull_shape:
+                self.logger.info("Source table is not M/Z enabled; no changes to shape data necessary")
+            else:
+                self.logger.info("Source table is M/Z enabled")
+                # Replace nulls that aren't Postgres-compatible
+                rows = rows.convert(self.geom_field, lambda x: re.sub(r'(1\.#QNAN000|NULL)', 'NaN', x) if isinstance(x, str) else x)
 
-            # Remove Z and/or M information if target table is not enabled for it
-            if force2d:
-                zm_enabled_test = self._is_m_or_z_enabled()
-                if zm_enabled_test:
-                    self.logger.info('Target table is M/Z enabled. Continuing...')
-                else:
-                    self.logger.info('Detected that shape needs Z and/or M values removed...')
-                    rows = rows.convert(self.geom_field, lambda x: force_2d(x) if isinstance(x, str) else x)
+                # Remove Z and/or M information if target table is not enabled for it
+                if force2d:
+                    zm_enabled_test = self._is_m_or_z_enabled()
+                    if zm_enabled_test:
+                        self.logger.info('Target table is M/Z enabled. Keeping source shape data as-is...')
+                    else:
+                        self.logger.info('Target table is not M/Z enabled. Remving Z and/or M values from source shape data...')
+                        rows = rows.convert(self.geom_field, lambda x: force_2d(x) if isinstance(x, str) else x)
 
         header = rows[0]
         str_header = ', '.join(header)
