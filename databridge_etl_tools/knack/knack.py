@@ -20,12 +20,14 @@ class Knack():
                  api_key, 
                  s3_bucket, 
                  s3_key,
+                 rename_fields,
                  **kwargs):
         self.knack_objectid = knack_objectid
         self.app_id = app_id
         self.api_key = api_key
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
+        self.rename_fields = rename_fields
         self.csv_path = '/tmp/output.csv'
 
     def get_type(self, knack_type):
@@ -153,7 +155,26 @@ class Knack():
 
         return out
 
+    def rename_csv_fields(self):
+        # Convert rename_fields string into a dict
+        rename_dict = dict(field.split(':') for field in self.rename_fields.split(','))
 
+        # Read the CSV file
+        with open(self.csv_path, 'r', newline='', encoding='utf-8') as infile:
+            reader = csv.reader(infile)
+            rows = list(reader)
+
+        # Get the header and rename fields
+        header = rows[0]
+        print("Original header:", header)
+        updated_header = [rename_dict.get(field, field) for field in header]
+        print("Updated header:", updated_header)
+
+        # Write the updated CSV back
+        with open(self.csv_path, 'w', newline='', encoding='utf-8') as outfile:
+            writer = csv.writer(outfile)
+            writer.writerow(updated_header)  # Write the updated header
+            writer.writerows(rows[1:])  # Write the remaining data
 
     def load_to_s3(self):
         s3 = boto3.resource('s3')
@@ -179,6 +200,9 @@ class Knack():
                 for record in records_batch:
                     out_record = self.convert_to_csv_row(schema, record)
                     writer.writerow(out_record)
+        
+        if self.rename_fields:
+            self.rename_csv_fields()
                     
         num_lines = sum(1 for _ in open(self.csv_path)) - 1
         assert num_lines > 0, 'CSV file contains 0 lines??'
