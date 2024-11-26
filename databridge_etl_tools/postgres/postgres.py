@@ -4,6 +4,7 @@ import geopetl
 import pytz
 import petl as etl
 from .postgres_connector import Postgres_Connector
+from ..utils import force_2d
 
 csv.field_size_limit(sys.maxsize)
 
@@ -143,7 +144,7 @@ class Postgres():
     def create_indexes(self, table_name):
         raise NotImplementedError
 
-    def prepare_file(self, file:str, mapping_dict:dict=None):
+    def prepare_file(self, file:str, mapping_dict:dict=None, force2d=True):
         '''
         Prepare a CSV file's geometry and header for insertion into Postgres; 
         write to CSV at self.temp_csv_path. If mapping_dict is not None, no edits 
@@ -159,7 +160,7 @@ class Postgres():
         # Note: this is for transforming non-multi types to multi, but we include multis in this list
         # because we will compare this against self.geom_type, which is retrieved from the etl_staging table,
         # which will probably be multi. This is safe becaue we will transform each row only if they are not already MULTI
-        shape_types = ['POLYGON', 'POLYGON Z', 'POLYGON M', 'POLYGON MZ', 'LINESTRING', 'LINESTRING Z', 'LINESTRING M', 'LINESTRING MZ', 'MULTIPOLYGON', 'MULTIPOLYGON Z', 'MULTIPOLYGON M', 'MULTIPOLYGON MZ', 'MULTILINESTRING', 'MULTILINESTRING Z', 'MULTILINESTRING M', 'MULTILINESTRING MZ']
+        shape_types = ['POLYGON', 'POLYGON Z', 'POLYGON M', 'POLYGON MZ', 'POLYGON ZM', 'LINESTRING', 'LINESTRING Z', 'LINESTRING M', 'LINESTRING MZ', 'LINESTRING ZM', 'MULTIPOLYGON', 'MULTIPOLYGON Z', 'MULTIPOLYGON M', 'MULTIPOLYGON MZ', 'MULTIPOLYGON ZM', 'MULTILINESTRING', 'MULTILINESTRING Z', 'MULTILINESTRING M', 'MULTILINESTRING MZ', 'MULTILINESTRING ZM']
 
         # Note: also run this if the data type is 'MULTILINESTRING' some source datasets will export as LINESTRING but the dataset type is actually MULTILINESTRING (one example: GIS_PLANNING.pedbikeplan_bikerec)
         # Note2: Also happening with poygons, example dataset: GIS_PPR.ppr_properties
@@ -178,6 +179,28 @@ class Postgres():
             rows = rows.convert(self.geom_field, lambda u, row: u.replace(row.row_geom_type, 'MULTI' + row.row_geom_type + ' (' ) + ')' if 'MULTI' not in row.row_geom_type else u, pass_row=True)
             # Remove our temporary column
             rows = rows.cutout('row_geom_type')
+
+            # Check if source table has M/Z values in it (by inspecting first row with non-null shape)
+            nonnull_rows = rows.selectnotnone(self.geom_field)
+            geom_idx = nonnull_rows.header().index(self.geom_field)
+            first_nonnull_shape_row = nonnull_rows[1]
+            first_nonnull_shape = first_nonnull_shape_row[geom_idx]
+            self.logger.info(f"First non-null shape field:\n{first_nonnull_shape}")
+            if force_2d(first_nonnull_shape) == first_nonnull_shape:
+                self.logger.info("Source table is not M/Z enabled; no changes to shape data necessary")
+            else:
+                self.logger.info("Source table is M/Z enabled")
+                # Replace nulls that aren't Postgres-compatible
+                rows = rows.convert(self.geom_field, lambda x: re.sub(r'(1\.#QNAN000|NULL)', 'NaN', x) if isinstance(x, str) else x)
+
+                # Remove Z and/or M information if target table is not enabled for it
+                if force2d:
+                    zm_enabled_test = self._is_m_or_z_enabled()
+                    if zm_enabled_test:
+                        self.logger.info('Target table is M/Z enabled. Keeping source shape data as-is...')
+                    else:
+                        self.logger.info('Target table is not M/Z enabled. Remving Z and/or M values from source shape data...')
+                        rows = rows.convert(self.geom_field, lambda x: force_2d(x) if isinstance(x, str) else x)
 
         header = rows[0]
         str_header = ', '.join(header)
@@ -199,6 +222,68 @@ class Postgres():
         # Write our possibly modified lines into the temp_csv file
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
+
+    def _is_registered(self) -> bool:
+        """Check if the table is registered. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
+        with self.conn.cursor() as cursor:
+            stmt1 = f"select registration_id FROM sde.sde_table_registry where table_name = '{self.table_name}' and schema = '{self.table_schema}';"
+            stmt2 = f"select objectid FROM sde.gdb_items where lower(name) = 'databridge.{self.table_schema}.{self.table_name}';"
+            cursor.execute(stmt1)
+            registered_one = cursor.fetchone()
+            cursor.execute(stmt2)
+            registered_two = cursor.fetchone()
+            if registered_one and registered_two:
+                return True
+            # Both should be true or both should be false, otherwise this table is partially registered and we should
+            # clean up. Check out the postgres function public.force_drop_sde_table to see what tables to look at.
+            elif registered_one or registered_two:
+                raise AssertionError('Inconsistent registration detected! Please clean up SDE tables for this table.')
+            else:
+                return False
+    
+    def _is_m_or_z_enabled(self) -> bool:
+        """Check if a table is enabled for M- or Z- values. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
+        if not self._is_registered():
+            return False
+        
+        self.logger.info('Checking for z or m values in sde.gdb_items.definition column..')
+        with self.conn.cursor() as cursor:
+            # Assume innocence until proven guilty
+            m = False
+            z = False
+            has_m_or_z_stmt = f'''
+            SELECT definition FROM sde.gdb_items
+            WHERE name = 'databridge.{self.table_schema}.{self.table_name}'
+            '''
+            self.logger.info('Running has_m_or_z_stmt: ' + has_m_or_z_stmt)
+            cursor.execute(has_m_or_z_stmt)
+            result = cursor.fetchone()
+
+            if not result:
+                self.logger.info('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                return False
+            else:
+                xml_def = result[0]
+                if not xml_def:
+                    self.logger.info('No XML file found sde.gdb_items definition col, this is unusual for a registered table!')
+                    return False
+                else:
+                    m_search = re.search("<HasM>\D*<\/HasM>", xml_def)
+                    if not m_search:
+                        self.logger.info('No <HasM> element found in xml definition, assuming False.')
+                    else:
+                        if 'true' in m_search[0]:
+                            self.logger.info(m_search[0])
+                            m = True
+                    z_search = re.search("<HasZ>\D*<\/HasZ>", xml_def)
+                    if not z_search:
+                        self.logger.info('No <HasZ> element found in xml definition, assuming False.')
+                    else:
+                        if 'true' in z_search[0]:
+                            self.logger.info(z_search[0])
+                            z = True
+
+            return (m or z)
 
     def _make_mapping_dict(self, column_mappings:str = None, mappings_file:str = None) -> dict: 
         '''Transform a string dict or a file with a string dict into that dict'''
@@ -256,6 +341,9 @@ class Postgres():
             # f.readline() moves cursor position out of position
             str_header = f.readline().strip().split(',')            
             f.seek(0)
+            # deal with invisible line-starting encoding character 
+            # (without this you may get "psycopg2.errors.UndefinedColumn: column <colname> of relation <table_name> does not exist") at cursor.copy_expert(copy_stmt, f) below
+            str_header = [''.join([char.replace('\ufeff', '') for char in colname]) for colname in str_header] 
 
             with self.conn.cursor() as cursor:
                 cols_composables = []
@@ -369,8 +457,6 @@ class Postgres():
             self.logger.info('Saving CSV to local working directory.')
             # Move CSV out of temp path in self.csv_path and place in the current working directory
             os.replace(self.csv_path, os.path.join(os.getcwd(), self.table_name + '.csv'))
-            
-        
     
     def create_temp_table(self): 
         '''Create an empty temp table from self.table_name in the same schema'''
