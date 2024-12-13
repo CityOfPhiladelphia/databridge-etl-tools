@@ -6,9 +6,9 @@ import click
 @click.pass_context
 @click.option('--table_name', required=True)
 @click.option('--account_name', required=True)
-@click.option('--enterprise_schema', required=True)
-@click.option('--copy_from_source_schema', required=True)
-@click.option('--libpq_conn_string', required=True)
+@click.option('--enterprise_schema', required=True, help='The destination schema to copy the table to')
+@click.option('--copy_from_source_schema', required=True, help='The schema to copy the table from')
+@click.option('--libpq_conn_string', required=True, help='Connection string for the database')
 def db2(ctx, **kwargs):
     '''Run ETL commands for DB2'''
     ctx.obj = {}
