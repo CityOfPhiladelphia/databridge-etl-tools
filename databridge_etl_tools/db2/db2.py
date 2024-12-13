@@ -548,8 +548,13 @@ class Db2():
             # Put objectid at end.
             staging_columns.remove('objectid')
             staging_columns.append('objectid')
-            enterprise_columns.remove('objectid')
-            enterprise_columns.append(f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')")
+            try:
+                enterprise_columns.remove('objectid')
+            except:
+                pass
+            if f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}'" not in enterprise_columns:
+                enterprise_columns.append(f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')")
+
         # For scenarios where we have an objectid sequence on the viewer table, just remove objectid entirely and the database *should* take care of it.
         elif (not source_oid_column and oid_column) and not seq_name:
             staging_columns.remove('objectid')
