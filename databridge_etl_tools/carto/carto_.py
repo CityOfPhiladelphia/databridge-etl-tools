@@ -284,7 +284,7 @@ class Carto():
             print('\nConfirming indexes exist...')
             stmt = '''SELECT indexname FROM pg_indexes WHERE tablename = '{}';'''.format(table_name)
             response = self.execute_sql(stmt, fetch='many')
-            create_idx_stmt = ''
+            create_idx_stmts = []
             existing_indexes = [ x['indexname'] for x in response['rows'] ]
             wanted_indexes = self.index_fields.split(',')
             
@@ -296,7 +296,6 @@ class Carto():
                     continue
                 else:
                     if '+' in index_field:
-                        print(f'Creating compound index for {index_field}..')
                         # Too long of a name gets truncated, make a shorter name.
                         wanted_index_name = f'{table_name}_comp{idx_counter}'
                         idx_counter += 1
@@ -304,17 +303,21 @@ class Carto():
                         cols_sql = ', '.join(individual_cols)
                         # If we didn't find the index we expect, then try to create it again
                         if wanted_index_name not in existing_indexes:
-                            create_idx_stmt += f'CREATE INDEX {wanted_index_name} ON "{table_name}" ({cols_sql});'
+                            create_idx_stmts.append(f'CREATE INDEX {wanted_index_name} ON "{table_name}" ({cols_sql});')
                     else:
                         wanted_index_name = f'{table_name}_{index_field}'
                         # If we didn't find the index we expect, then try to create it again
                         if wanted_index_name not in existing_indexes:
-                            create_idx_stmt += f'CREATE INDEX {wanted_index_name} ON "{table_name}" ("{index_field}");'
+                            create_idx_stmts.append(f'CREATE INDEX {wanted_index_name} ON "{table_name}" ("{index_field}");')
 
-            if create_idx_stmt:
-                create_idx_stmt += 'COMMIT;'
-                print(f'Creating indexes: {create_idx_stmt}')
-                self.execute_sql(create_idx_stmt)
+            # Carto does have limits on how long a statement can run, so let's run these individually instead:
+            # Example error you could get:
+            # pyrestcli.exceptions.RateLimitException: ["You are over platform's limits: SQL query timeout error. Refactor your query before running again or contact CARTO support for more details."]
+            if create_idx_stmts:
+                for s in create_idx_stmts:
+                    print(f'Creating indexes: {s}')
+                    self.execute_sql(s)
+                    self.execute_sql('COMMIT;')  
             else:
                 print('Indexes confirmed.\n')
 
