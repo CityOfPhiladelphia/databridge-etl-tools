@@ -552,7 +552,7 @@ class Db2():
                 enterprise_columns.remove('objectid')
             except:
                 pass
-            if f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}'" not in enterprise_columns:
+            if f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')" not in enterprise_columns:
                 enterprise_columns.append(f"sde.next_rowid('{self.enterprise_schema}','{self.enterprise_dataset_name}')")
 
         # For scenarios where we have an objectid sequence on the viewer table, just remove objectid entirely and the database *should* take care of it.
