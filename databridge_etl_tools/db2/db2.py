@@ -22,13 +22,15 @@ class Db2():
                 copy_from_source_schema = None,
                 enterprise_schema = None,
                 oracle_conn_string = None,
-                libpq_conn_string = None
+                libpq_conn_string = None,
+                index_fields = None
                 ):
         self.table_name = table_name
         self.account_name = account_name
         self.copy_from_source_schema = copy_from_source_schema
         self.enterprise_schema = enterprise_schema
         self.libpq_conn_string = libpq_conn_string
+        self.index_fields = index_fields.split(',') if index_fields else None
         self.oracle_conn_string = oracle_conn_string
         self.staging_schema = 'etl_staging'
         # use this to transform specific to more general data types for staging table
@@ -641,7 +643,19 @@ class Db2():
         print(f'Source count: {source_count}, dest_count: {dest_count}')
         assert source_count == dest_count
 
-        print('Success!')
+        self.logger.info("\nInstalling indexes, we will NOT fail if we can't make them so table doesn't overwrite several times.")
+        if self.index_fields:
+            try:
+                for i in self.index_fields:
+                    index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {prod_table} USING btree ({i});'
+                    self.logger.info('Running index_stmt: ' + str(index_stmt))
+                    self.pg_cursor.execute(index_stmt)
+                    self.pg_cursor.execute('COMMIT;')
+            except Exception as e:
+                self.logger.error(f'Error creating index: {str(e)}')
+                self.pg_cursor.execute('ROLLBACK;')
+
+        print('\nSuccess!')
 
     def update_oracle_scn(self):
         

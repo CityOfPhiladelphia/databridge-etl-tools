@@ -9,6 +9,7 @@ import click
 @click.option('--enterprise_schema', required=True, help='The destination schema to copy the table to')
 @click.option('--copy_from_source_schema', required=True, help='The schema to copy the table from')
 @click.option('--libpq_conn_string', required=True, help='Connection string for the database')
+@click.option('--index_fields', required=False, help='Optionally specify the fields to index')
 def db2(ctx, **kwargs):
     '''Run ETL commands for DB2'''
     ctx.obj = {}
