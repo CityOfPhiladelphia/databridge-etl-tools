@@ -647,7 +647,16 @@ class Db2():
         if self.index_fields:
             try:
                 for i in self.index_fields:
-                    index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {prod_table} USING btree ({i});'
+                    # if compound index
+                    if '+' in i:
+                        split_indexes = i.split('+')
+                        # compile the indexes into a comma separated string because we don't know how many could be in the compound.
+                        cols = ', '.join(split_indexes)
+                        idx_name = '_'.join(split_indexes) + '_idx'
+                        index_stmt = f'CREATE INDEX IF NOT EXISTS {idx_name}_idx ON {prod_table} USING btree ({cols});'
+                    # If single index
+                    else:
+                        index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {prod_table} USING btree ({i});'
                     self.logger.info('Running index_stmt: ' + str(index_stmt))
                     self.pg_cursor.execute(index_stmt)
                     self.pg_cursor.execute('COMMIT;')
