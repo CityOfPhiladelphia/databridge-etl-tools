@@ -52,6 +52,7 @@ class Postgres():
         self._pk_constraint_name = None
         self._fields = None
         self._database_object_type = None
+        self._registration_id = None
 
         # First make sure the table exists: 
         if self.table_schema == None: # If no schema provided, assume the table is TEMPORARY
@@ -232,8 +233,14 @@ class Postgres():
             registered_one = cursor.fetchone()
             cursor.execute(stmt2)
             registered_two = cursor.fetchone()
+            
+            if registered_one:
+                self.logger.info(f'Found registration_id in sde.sde_table_registry: {registered_one}')
+                self._registration_id = registered_one[0]
+
             if registered_one and registered_two:
                 return True
+
             # Both should be true or both should be false, otherwise this table is partially registered and we should
             # clean up. Check out the postgres function public.force_drop_sde_table to see what tables to look at.
             elif registered_one or registered_two:
@@ -362,7 +369,23 @@ class Postgres():
 
                 self.logger.info(f'Postgres Write Successful: {cursor.rowcount:,} rows imported.\n')
 
-    def get_row_count(self):
+        if self._is_registered():
+            if self._registration_id:
+                print(f'Table is registered, updating objectid columns...')
+                max_objectid = f'''SELECT max(objectid) FROM {self.table_schema}.{self.table_name};'''
+                self.execute_sql(max_objectid)
+                max_objectid = self.execute_sql(max_objectid, fetch='one')[0]
+
+                stmt = f'''UPDATE {self.table_schema}.i{self._registration_id} SET base_id={max_objectid + 1}, last_id={max_objectid} WHERE id_type=2;'''
+                self.execute_sql(stmt)
+                self.logger.info(f'Updated objectid column in {self.table_schema}.i{self._registration_id} to {max_objectid + 1}.\n')
+            else:
+                self.logger.info(f'Table is registered, but no registration_id found. Cannot update objectid column.\n')
+        else:
+            self.logger.info(f'Table is not registered, skipping objectid column update.\n')
+
+
+    def get_row_count(self) -> int:
         '''Get the current table row count. Don't make this a property because 
         row counts change.'''
         data = self.execute_sql(
