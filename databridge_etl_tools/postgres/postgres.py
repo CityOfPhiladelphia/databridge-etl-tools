@@ -436,18 +436,18 @@ class Postgres():
             raise AssertionError('Error! Dataset is empty? Line count of CSV is 0.')
 
         # Find datetime fields so we can make everything timezone aware if it's naive.. This is important for Carto.
-        datetime_fields = []
+        timestamp_fields = []
         # Do not use etl.typeset to determine data types because otherwise it causes geopetl to
         # read the database multiple times
         for field in self.fields_and_types: 
             # Create list of datetime type fields that aren't timezone aware:
-            if ('timestamp' in field[1].lower() or 'date' in field[1].lower()) and \
+            if 'timestamp' in field[1].lower() and \
                 ('tz' not in field[1].lower() and 'with time zone' not in field[1].lower()):
-                datetime_fields.append(field[0].lower())
+                timestamp_fields.append(field[0].lower())
 
-        if datetime_fields:
-            self.logger.info(f'\nConverting {datetime_fields} fields to Eastern timezone datetime\n')
-            rows_new = etl.convert(rows, datetime_fields, pytz.timezone('US/Eastern').localize)
+        if timestamp_fields:
+            self.logger.info(f'\nConverting timestamp fields, {timestamp_fields} to Eastern timezone datetime\n')
+            rows_new = etl.convert(rows, timestamp_fields, pytz.timezone('US/Eastern').localize)
             # Replace rows with our converted object
             rows = rows_new
 
