@@ -4,6 +4,8 @@ import sys
 import os
 import re
 import json
+import pytz
+import datetime
 
 from carto.sql import SQLClient
 from carto.auth import APIKeyAuthClient
@@ -31,7 +33,7 @@ DATA_TYPE_MAP = {
     'array':                        'jsonb',
     'time':                         'time',
     # Make all these have a timezone, because Carto always does time zones
-    'date':                         'timestamp with time zone',
+    'date':                         'date',
     'datetime':                     'timestamp with time zone',
     'timestamp':                    'timestamp with time zone',
     'timestamp without time zone':  'timestamp with time zone',
@@ -332,6 +334,22 @@ class Carto():
             self.logger.info("Exception encountered trying to import rows with utf-8 encoding, trying latin-1...")
             rows = etl.fromcsv(self.csv_path, encoding='latin-1')
         header = rows[0]
+
+        # Treat "date" (NOT timestamp!) type fields specially, we have to make sure we convert them right for Carto.
+        # Grab the json schema again so we can determine the date fields.
+        with open(self.json_schema_path) as json_file:
+            schema = json.load(json_file).get('fields', None)
+            if not schema:
+                self.logger.error('Json schema malformatted...')
+                raise
+        for i in schema:
+            if i['type'] == 'date':
+                field_name = i['name']
+                print(f'Localizing date field: "{field_name}"..')
+                # Add midnight to the date and then localize to EST so Carto displays it properly.
+                rows = rows.convert(field_name, lambda c: pytz.timezone('US/Eastern').localize(datetime.datetime.strptime(c + ' 00:00:00', '%Y-%m-%d %H:%M:%S')) if c else None)
+                print(f'Field "{field_name}" localized.')
+
         str_header = ''
         num_fields = len(header)
         self._num_rows_in_upload_file = rows.nrows()
