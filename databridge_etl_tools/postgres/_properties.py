@@ -81,7 +81,35 @@ def export_json_schema(self):
             # Update this with the primary key columns if known
             final_json["primaryKey"] = [ primary_key ]
 
-        self._export_json_schema = json.dumps(final_json)
+        if self.geom_field:
+            # first get srid
+            stmt = sql.SQL('''
+            SELECT srid FROM geometry_columns
+            WHERE f_table_name = %s
+            AND f_table_schema = %s;
+            ''')
+            results = self.execute_sql(stmt, data=[self.table_name, self.table_schema], fetch='one')
+            if results:
+                srid = results[0]
+            assert srid
+
+            if self.geom_type.lower() == 'multipolygon' or self.geom_type.lower() == 'polygon':
+                # not sure why, but polygons have to be a generic "geometry" to work in carto.
+                geom_type = 'geometry'
+            else:
+                geom_type = self.geom_type.lower()
+
+            # Properly format shape field
+            for field in fields:
+                if field['name'] == self.geom_field:
+                    field['type'] = 'geometry'
+                    field['geometry_type'] = geom_type
+                    field['srid'] = srid
+                    break
+
+        print(json.dumps(final_json, indent=2))
+
+        self._export_json_schema = json.dumps(final_json, indent=2)
     return self._export_json_schema
 
 @property
