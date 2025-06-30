@@ -562,6 +562,10 @@ class Db2():
             staging_columns.remove('objectid')
             staging_columns.remove('objectid')
 
+        # add double quotes around all column names to allow columns names with varying case
+        staging_columns = [f'"{col}"' if 'sde.next_rowid' not in col else col for col in staging_columns]
+        enterprise_columns = [f'"{col}"' if 'sde.next_rowid' not in col else col for col in enterprise_columns]
+
         staging_columns_str = ', '.join(staging_columns)
         enterprise_columns_str = ', '.join(enterprise_columns)
 
