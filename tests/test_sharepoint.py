@@ -3,9 +3,13 @@ from databridge_etl_tools.sharepoint.sharepoint import Sharepoint
 from .constants import S3_BUCKET
 
 @pytest.fixture
-def sp_csv(graphapi_secret_name):
+def sp_csv(graphapi_tenant_id,
+           graphapi_application_id,
+           graphapi_secret_value):
     sharepoint_object = Sharepoint(
-        graphapi_secret_name=graphapi_secret_name,
+        graphapi_tenant_id=graphapi_tenant_id,
+        graphapi_application_id=graphapi_application_id,
+        graphapi_secret_value=graphapi_secret_value,
         site_name="ps360-metrics-share",
         file_path="etl_tools_test_sheet.csv"
         s3_bucket=S3_BUCKET,
@@ -14,9 +18,13 @@ def sp_csv(graphapi_secret_name):
     return sharepoint_object
 
 @pytest.fixture
-def sp_xlsx(graphapi_secret_name):
+def sp_xlsx(graphapi_tenant_id,
+           graphapi_application_id,
+           graphapi_secret_value):
     sharepoint_object = Sharepoint(
-        graphapi_secret_name=graphapi_secret_name,
+        graphapi_tenant_id=graphapi_tenant_id,
+        graphapi_application_id=graphapi_application_id,
+        graphapi_secret_value=graphapi_secret_value,
         site_name="ps360-metrics-share",
         file_path="etl_tools_test_workbook.xlsx",
         s3_bucket=S3_BUCKET,

@@ -4,7 +4,9 @@ import click
 
 @click.group()
 @click.pass_context
-@click.option('--graphapi_secret_name', required=True, help='Name of the Keeper secret containing credentials for initializing Microsoft GraphAPI client.')
+@click.option('--graphapi_tenant_id', required=True, help='Tenant ID credential for initializing Microsoft GraphAPI client. Should be obtained from Keeper.')
+@click.option('--graphapi_application_id', required=True, help='Application ID credential for initializing Microsoft GraphAPI client. Should be obtained from Keeper.')
+@click.option('--graphapi_secret_value', required=True, help='Secret Value credential for initializing Microsoft GraphAPI client. Should be obtained from Keeper.')
 @click.option('--site_name', required=True, help='Name of the Sharepoint site in which the file is located.')
 @click.option('--file_path', required=True, help='File path all the way down to the desired file from top of Sharepoint folder.')
 @click.option('--s3_bucket', required=True, help='Bucket to place the extracted csv in.')

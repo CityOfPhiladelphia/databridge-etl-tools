@@ -1,6 +1,5 @@
 import logging 
 import sys
-import citygeo_secrets as cgs
 from azure.identity import ClientSecretCredential
 from msgraph_beta import GraphServiceClient
 from datetime import datetime, date
@@ -16,16 +15,28 @@ import httpx
 class Sharepoint():
     """Extracts a CSV from a .csv or .xlsx file in Sharepoint."""
     def __init__(self, 
-                 graphapi_secret_name,
+                 graphapi_tenant_id,
+                 graphapi_application_id,
+                 graphapi_secret_value,
                  site_name,
                  file_path,
                  s3_bucket,
                  s3_key,
                  **kwargs):
-        #TODO: consider whether to make SharepointClient its own object
-        self.graphapi_secret_name = graphapi_secret_name
-        self.client, self.access_token, self.remaining = \
-            cgs.connect_with_secrets(self.get_client, self.graphapi_secret_name)
+        self.graphapi_tenant_id = graphapi_tenant_id
+        self.graphapi_application_id = graphapi_application_id
+        self.graphapi_secret_value = graphapi_secret_value
+
+        self.client, self.access_token = self.get_client()
+        # TODO: extract the number of remaining days secret is still valid,
+        # without depending on storing it in Keeper.
+        # this can be done by taking in GraphAPI Object ID (NOT same as Application ID)
+        # as an input argument, then calling
+        # app = await self.client.applications.by_application_id(self.graphapi_object_id).get()
+        # for secret in app.password_credentials:
+            # if "databridge" in secret.display_name.lower():
+                # self.remaining = secret.end_date_time 
+                # then extract number of days from string time formatting
         self.site_name = site_name
         self.file_path = file_path
         self.file_extension = re.findall(r"(?<=\.)\w+$", self.file_path)[0]
@@ -36,25 +47,21 @@ class Sharepoint():
         # TODO: enable renaming fields
         # self.rename_fields = kwargs.get('rename_fields', None)
     
-    def get_client(self, creds: dict) -> tuple[GraphServiceClient, str, int]:
+    def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
         the secret is still valid (needs to be renewed every 365 days)"""
-        creds_app = creds[self.graphapi_secret_name]
         credentials = ClientSecretCredential(
             # These field names might need to be updated if secret changes in Keeper.
-            tenant_id=creds_app["Tenant ID"],
-            client_id=creds_app["Application ID"],
-            client_secret=creds_app["Secret Value"]
+            tenant_id=self.graphapi_tenant_id,
+            client_id=self.graphapi_application_id,
+            client_secret=self.graphapi_secret_value
         )
         token = credentials.get_token("https://graph.microsoft.com/.default")
         access_token = token.token
         SCOPES = ['https://graph.microsoft.com/.default']
         client = GraphServiceClient(credentials=credentials, scopes=SCOPES)
-        EXPIRATION_DATE_FORMAT = "%m/%d/%Y"
-        expiration_date = datetime.strptime(creds_app['Secret Expiration'], EXPIRATION_DATE_FORMAT).date()
-        remaining = expiration_date - date.today()
 
-        return client, access_token, remaining
+        return client, access_token
 
     async def get_raw_bytes(self, url):
         headers = {
@@ -115,13 +122,13 @@ class Sharepoint():
         self.load_to_s3()
 
         # TODO: consider whether to use logger instead
-        if self.remaining.days < 30: 
-            print('GraphAPI App for Sharepoint access is expiring soon!')
-            print(f'1. Communicate with OIT Platform Engineering to create a new certificate for "{self.graphapi_secret_name}"')
-            print('2. Update "password" field of password manager record')
-            print('3. Update "Expiration Date" of password manager record\n')
-            print('Returning non-zero exit code to ensure notification; script otherwise completed successfully')
-            sys.exit(1)
+        # if self.remaining.days < 30: 
+        #     print('GraphAPI App for Sharepoint access is expiring soon!')
+        #     print(f'1. Communicate with OIT Platform Engineering to create a new certificate')
+        #     print('2. Update "password" field of password manager record')
+        #     print('3. Update "Expiration Date" of password manager record\n')
+        #     print('Returning non-zero exit code to ensure notification; script otherwise completed successfully')
+        #     sys.exit(1)
 
     @property
     def logger(self):
