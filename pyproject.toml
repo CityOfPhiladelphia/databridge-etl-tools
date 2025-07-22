@@ -18,7 +18,6 @@ requires-python = ">=3.7,<3.10"
 readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
-    "citygeo_secrets @ git+https://github.com/CityOfPhiladelphia/citygeo_secrets.git",
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@master",
     "setuptools>=67.6.0",
     "arcgis",

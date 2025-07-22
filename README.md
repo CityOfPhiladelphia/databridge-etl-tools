@@ -3,7 +3,7 @@
 Command line tools to extract and load SQL and Carto tables using [JSON Table Schema](http://frictionlessdata.io/guides/json-table-schema/).
 
 ## Overview
-Use this tool to extract data from an Oracle SDE database, load it to S3, and then load it to PostGIS or Carto from S3. In order for this to work, a JSON table schema for the table you are working with needs to reside in S3, in the bucket _citygeo-airflow-databridge2_ in the _schemas/_ folder. 
+Use this tool to extract data from a source such as an Oracle SDE database, load it to S3, and then load it to a destination such as PostGIS or Carto from S3. In order for this to work, a JSON table schema for the table you are working with needs to reside in S3, in the bucket _citygeo-airflow-databridge2_ in the _schemas/_ folder. 
 
 The tool can be used either with Docker or as a standalone Python package. 
 
@@ -196,6 +196,19 @@ databridge_etl_tools \
     --s3_bucket test \
     --s3_key staging/test/candidates.csv \
     extract
+
+# Extract from Sharepoint
+databridge_etl_tools \
+    sharepoint \
+    --graphapi_tenant_id <Tenant ID from Keeper> \
+    --graphapi_application_id <Application ID from Keeper> \
+    --graphapi_secret_value' <Secret Value from Keeper> \
+    --site_name ps360-metrics-share \
+    --file_path etl_tools_test_workbook.xlsx \
+    --s3_bucket test \
+    --s3_key staging/test/sharepoint_xlsx_test.csv \
+    --sheet_name Dataset \
+    extract
 ```
 
 ## Development
@@ -332,4 +345,15 @@ For this reason you should make changes to your test branch, make sure they pass
                 * `--mappings_file` TEXT    A text file that can be opened with `open()` and that contains one Python dict that can be read with `ast.literal_eval()`. The file should take the form `{"data_col": "db_table_col", "data_col2": "db_table_col2", ... }`. Note no quotes around the curly braces `{}`.  
                 * `--other_schema` TEXT     Schema of Postgres table  to upsert from. If None or absent, assume the same schema as the table being upserted to
                 * `--other_table` TEXT      Name of Postgres table to upsert from   [required]
-
+* `sharepoint`: Run ETL commands for Sharepoint
+    * Args: 
+        * `--graphapi_tenant_id` TEXT         [required]
+        * `--graphapi_application_id` TEXT       [required]
+        * `--graphapi_secret_value` TEXT        [required]
+        * `--site_name` TEXT  [required]
+        * `--file_path` TEXT [required]
+        * `--s3_bucket` TEXT          [required]
+        * `--s3_key` TEXT             [required]    
+        * `--sheet_name ` TEXT
+    * Commands: 
+        * `extract` Extracts a dataset in Sharepoint into a CSV file in S3
