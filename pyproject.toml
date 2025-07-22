@@ -9,7 +9,7 @@ py_modules = ['databridge_etl_tools']
 
 [project]
 name = "databridge-etl-tools"
-version = "1.3.14"
+version = "1.4.0" 
 description = "Command line tools to extract and load SQL data to various endpoints"
 authors = [
     {name = "citygeo", email = "maps@phila.gov"},
@@ -18,6 +18,7 @@ requires-python = ">=3.7,<3.10"
 readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
+    "citygeo_secrets @ git+https://github.com/CityOfPhiladelphia/citygeo_secrets.git",
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@master",
     "setuptools>=67.6.0",
     "arcgis",
@@ -50,7 +51,12 @@ dependencies = [
     "stringcase", 
     "hurry.filesize", 
     "smart_open", 
-    "retrying"
+    "retrying",
+    "azure-core",
+    "azure-identity",
+    "msgraph-core",
+    "msgraph-beta-sdk",
+    "openpyxl"
 ]
 
 # installs our command as a cli runnable script
