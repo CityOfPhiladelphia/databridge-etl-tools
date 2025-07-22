@@ -71,7 +71,7 @@ class Sharepoint():
         DOMAIN = "phila.sharepoint.com"
         site_url = f"{GRAPHAPI_URL_START}/{DOMAIN}:/sites/{self.site_name}"
         site_collection_response = await self.client.sites_with_url(site_url).get()
-        # actual data is contained in returned JSOn as an attribute
+        # actual data is contained in returned JSON as an attribute
         site = site_collection_response.additional_data
         site_id = site["id"]
 
@@ -90,11 +90,14 @@ class Sharepoint():
         elif self.file_extension == "xlsx":
             content_stream = BytesIO(content)
             workbook = load_workbook(content_stream, read_only=True)
-            if self.sheet_name is not None:
+            if self.sheet_name is None:
+                raise Exception("Must use the --sheet_name flag to specify a sheet when extracting a .xlsx file. " 
+                                f"Consider one of {workbook.sheetnames}")
+            else:
                 try:
                     sheet = workbook[self.sheet_name]
                 except:
-                    raise KeyError(f"No sehet named '{self.sheet_name} in {self.file_path}")
+                    raise KeyError(f"No sheet named '{self.sheet_name} in {self.file_path}")
                 with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                     # openpyxl only provides row-by-row access to sheet data
                     for row in sheet.iter_rows(values_only=True):
@@ -114,7 +117,7 @@ class Sharepoint():
         # TODO: consider whether to use logger instead
         if self.remaining.days < 30: 
             print('GraphAPI App for Sharepoint access is expiring soon!')
-            print(f'1. Communicate with OIT Platform Engineering to create a new certificate for "{GRAPH_APP}"')
+            print(f'1. Communicate with OIT Platform Engineering to create a new certificate for "{self.graphapi_secret_name}"')
             print('2. Update "password" field of password manager record')
             print('3. Update "Expiration Date" of password manager record\n')
             print('Returning non-zero exit code to ensure notification; script otherwise completed successfully')
