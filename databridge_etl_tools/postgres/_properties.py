@@ -5,13 +5,16 @@ from .postgres_map import DATA_TYPE_MAP, GEOM_TYPE_MAP
 
 @property
 def csv_path(self):
-    csv_file_name = self.table_name
-    # On Windows, save to current directory
-    if os.name == 'nt':
-        csv_path = '{}.csv'.format(csv_file_name)
-    # On Linux, save to tmp folder
+    if not self.local_csv_path:
+        csv_file_name = self.table_name
+        # On Windows, save to current directory
+        if os.name == 'nt':
+            csv_path = '{}.csv'.format(csv_file_name)
+        # On Linux, save to tmp folder
+        else:
+            csv_path = '/tmp/{}.csv'.format(csv_file_name)
     else:
-        csv_path = '/tmp/{}.csv'.format(csv_file_name)
+        csv_path = self.local_csv_path
     return csv_path
 
 @property
