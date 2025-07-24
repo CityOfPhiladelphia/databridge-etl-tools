@@ -146,6 +146,13 @@ class Postgres():
     def create_indexes(self, table_name):
         raise NotImplementedError
 
+    def get_csv(self):
+        '''
+        Simple wrapper method for retrieving csv locally or from s3
+        '''
+        if not self.local_csv_path:
+            self.get_csv_from_s3()
+
     def prepare_file(self, file:str, mapping_dict:dict=None, force2d=True):
         '''
         Prepare a CSV file's geometry and header for insertion into Postgres; 
@@ -558,8 +565,7 @@ class Postgres():
         table need to be included. All column names must be quoted. 
         '''
         mapping_dict = self._make_mapping_dict(column_mappings, mappings_file)
-        if not self.local_csv_path:
-            self.get_csv_from_s3()
+        self.get_csv()
         self.prepare_file(file=self.csv_path, mapping_dict=mapping_dict)
         if truncate_before_load:
             self.delete_from_truncate()
@@ -695,7 +701,7 @@ class Postgres():
         '''Upsert a CSV file from S3 to a Postgres table'''
         assert self.check_exists(self.temp_table_name, self.table_schema) == False, f'Temporary Table {self.temp_table_name} already exists in this DB!'
 
-        self.get_csv_from_s3()
+        self.get_csv()
         self.prepare_file(self.csv_path, mapping_dict)
         self.create_temp_table()
         self.write_csv(write_file=self.temp_csv_path, table_name=self.temp_table_name, 
