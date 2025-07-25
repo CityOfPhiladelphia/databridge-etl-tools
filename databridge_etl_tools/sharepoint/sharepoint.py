@@ -58,8 +58,13 @@ class Sharepoint():
         )
         token = credentials.get_token("https://graph.microsoft.com/.default")
         access_token = token.token
+
+        print("Access token created")
+
         SCOPES = ['https://graph.microsoft.com/.default']
         client = GraphServiceClient(credentials=credentials, scopes=SCOPES)
+
+        print("GraphAPI Client created")
 
         return client, access_token
 
@@ -77,7 +82,7 @@ class Sharepoint():
         GRAPHAPI_URL_START = "https://graph.microsoft.com/v1.0/sites"
         DOMAIN = "phila.sharepoint.com"
         site_url = f"{GRAPHAPI_URL_START}/{DOMAIN}:/sites/{self.site_name}"
-        site_collection_response = await self.client.sites_with_url(site_url).get()
+        site_collection_response = await self.client.sites.with_url(site_url).get()
         # actual data is contained in returned JSON as an attribute
         site = site_collection_response.additional_data
         site_id = site["id"]
@@ -118,8 +123,16 @@ class Sharepoint():
 
     def extract(self):
         content = asyncio.run(self.get_sharepoint_content())
+
+        print(f"File content of {self.file_path} obtained")
+
         self.write_to_temp(content)
+
+        print(f"Content written to temporary csv")
+
         self.load_to_s3()
+
+        print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
 
         # TODO: consider whether to use logger instead
         # if self.remaining.days < 30: 
