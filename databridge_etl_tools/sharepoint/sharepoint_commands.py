@@ -12,6 +12,7 @@ import click
 @click.option('--s3_bucket', required=True, help='Bucket to place the extracted csv in.')
 @click.option('--s3_key', required=True, help='key under the bucket, example: "staging/dept/table_name.csv')
 @click.option('--sheet_name', required=False, help='Name of specified sheet to extract as csv if the Sharepoint file is an xlsx workbook.')
+@click.option('--debug', required=False, is_flag=True)
 def sharepoint(ctx, **kwargs):
     ctx.obj = Sharepoint(**kwargs)
 

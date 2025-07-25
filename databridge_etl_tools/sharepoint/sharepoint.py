@@ -23,6 +23,8 @@ class Sharepoint():
                  s3_bucket,
                  s3_key,
                  **kwargs):
+        self.debug = kwargs.get('debug', False)
+
         self.graphapi_tenant_id = graphapi_tenant_id
         self.graphapi_application_id = graphapi_application_id
         self.graphapi_secret_value = graphapi_secret_value
@@ -58,13 +60,13 @@ class Sharepoint():
         )
         token = credentials.get_token("https://graph.microsoft.com/.default")
         access_token = token.token
-
-        print("Access token created")
+        if self.debug:
+            print("Access token created")
 
         SCOPES = ['https://graph.microsoft.com/.default']
         client = GraphServiceClient(credentials=credentials, scopes=SCOPES)
-
-        print("GraphAPI Client created")
+        if self.debug:
+            print("GraphAPI Client created")
 
         return client, access_token
 
@@ -108,6 +110,8 @@ class Sharepoint():
             else:
                 try:
                     sheet = workbook[self.sheet_name]
+                    if self.debug:
+                        print(f"Sheet {self.sheet_name} extracted")
                 except:
                     raise KeyError(f"No sheet named '{self.sheet_name} in {self.file_path}")
                 with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
@@ -123,16 +127,15 @@ class Sharepoint():
 
     def extract(self):
         content = asyncio.run(self.get_sharepoint_content())
-
-        print(f"File content of {self.file_path} obtained")
-
+        if self.debug:
+            print(f"File content of {self.file_path} obtained")
         self.write_to_temp(content)
-
-        print(f"Content written to temporary csv")
-
+        if self.debug:
+            print(f"Content written to temporary csv")
         self.load_to_s3()
-
-        print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
+        if self.debug:
+            print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
+            print("Extraction complete!")
 
         # TODO: consider whether to use logger instead
         # if self.remaining.days < 30: 
