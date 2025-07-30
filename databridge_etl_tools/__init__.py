@@ -7,4 +7,4 @@ from .opendata import opendata
 from .postgres import postgres
 from .knack import knack
 from .airtable import airtable
-# from .sharepoint import sharepoint
+from .sharepoint import sharepoint

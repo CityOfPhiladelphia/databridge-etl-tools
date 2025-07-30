@@ -14,6 +14,7 @@ import click
 @click.option('--sheet_name', required=False, help='Name of specified sheet to extract as csv if the Sharepoint file is an xlsx workbook.')
 @click.option('--debug', required=False, is_flag=True)
 def sharepoint(ctx, **kwargs):
+    """Run ETL commands for Sharepoint"""
     ctx.obj = Sharepoint(**kwargs)
 
 @sharepoint.command()
