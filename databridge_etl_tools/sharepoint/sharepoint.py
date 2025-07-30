@@ -46,8 +46,6 @@ class Sharepoint():
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
         self.csv_path = '/tmp/output.csv'
-        # TODO: enable renaming fields
-        # self.rename_fields = kwargs.get('rename_fields', None)
     
     def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
