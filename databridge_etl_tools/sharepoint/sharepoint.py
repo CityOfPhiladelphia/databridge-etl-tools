@@ -98,6 +98,7 @@ class Sharepoint():
         # TODO: make sure headers are handled properly
         if self.file_extension == "csv":
             with open(self.csv_path, "wb") as f:
+                # TODO: remove all-null rows at bottom of content
                 f.write(content)
         elif self.file_extension == "xlsx":
             content_stream = BytesIO(content)
@@ -115,7 +116,8 @@ class Sharepoint():
                 with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
                     # openpyxl only provides row-by-row access to sheet data
                     for row in sheet.iter_rows(values_only=True):
-                        csv.writer(f).writerow(row)
+                        if set([cell for cell in row]) != {None}: # remove all-null rows
+                            csv.writer(f).writerow(row)
         else:
             raise Exception(f"Sharepoint file should be of type .csv or .xlsx; given {self.file_extension}")
 
