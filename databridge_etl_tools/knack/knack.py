@@ -93,7 +93,12 @@ class Knack():
                 'X-Knack-REST-API-KEY': self.api_key
             })
 
-        data = response.json()
+        try:
+            data = response.json()
+        except Exception as e:
+            print(f'Exception reading data from Knack. URL used: https://api.knack.com/v1/objects/{self.knack_objectid}/fields')
+            print(f'Knack response: {response.text}')
+            raise e
 
         return self.convert_knack_schema(data['fields'])
 
