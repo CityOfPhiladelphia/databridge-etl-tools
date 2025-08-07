@@ -1,8 +1,4 @@
-#FROM ubuntu:16.04
-#FROM python:3.6.15-slim-bullseye
-#FROM python:3.7.12-slim-buster
-#FROM python:3.8.15-slim-buster
-FROM python:3.9.23-slim-bullseye
+FROM python:3.9.23-slim-bookworm
 
 # Add our worker users custom binaries to the path, some python packages are installed here.
 ENV PATH="/home/worker/.local/bin:${PATH}"
