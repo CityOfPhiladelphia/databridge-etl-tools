@@ -103,6 +103,7 @@ RUN pip3.9 install pip --upgrade \
   pytz==2021.3 \
   wheel
 
+########################
 # FAST BUILD LINES
 COPY docker-fast-requirements.txt /docker-fast-requirements.txt
 RUN pip3.9 install -r /docker-fast-requirements.txt
