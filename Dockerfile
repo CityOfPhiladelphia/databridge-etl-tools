@@ -1,8 +1,4 @@
-#FROM ubuntu:16.04
-#FROM python:3.6.15-slim-bullseye
-#FROM python:3.7.12-slim-buster
-#FROM python:3.8.15-slim-buster
-FROM python:3.9.16-slim-buster
+FROM python:3.9.23-slim-bullseye
 
 # Add our worker users custom binaries to the path, some python packages are installed here.
 ENV PATH="/home/worker/.local/bin:${PATH}"
@@ -32,59 +28,59 @@ ENV PATH=$ORACLE_HOME/bin:$PATH
 # EDIT with oracle instantclient 18.5 these seems ot no longer be needed.
 
 RUN set -ex \
-    && buildDeps=' \
-        python3-dev \
-        libkrb5-dev \
-        libsasl2-dev \
-        libssl-dev \
-        libffi-dev \
-        build-essential \
-        libblas-dev \
-        liblapack-dev \
-    ' \
-    && apt-get update -yqq \
-    && apt-get install -yqq --no-install-recommends \
-        $buildDeps \
-        libpq-dev \
-        netbase \
-        apt-utils \
-        unzip \
-        curl \
-        netcat \
-        locales \
-        git \
-        alien \
-        libgdal-dev \
-        libgeos-dev \
-        binutils \
-        libproj-dev \
-        gdal-bin \
-        libspatialindex-dev \
-        libaio1 \
-        freetds-dev
+  && buildDeps=' \
+  python3-dev \
+  libkrb5-dev \
+  libsasl2-dev \
+  libssl-dev \
+  libffi-dev \
+  build-essential \
+  libblas-dev \
+  liblapack-dev \
+  ' \
+  && apt-get update -yqq \
+  && apt-get install -yqq --no-install-recommends \
+  $buildDeps \
+  libpq-dev \
+  netbase \
+  apt-utils \
+  unzip \
+  curl \
+  netcat \
+  locales \
+  git \
+  alien \
+  libgdal-dev \
+  libgeos-dev \
+  binutils \
+  libproj-dev \
+  gdal-bin \
+  libspatialindex-dev \
+  libaio1 \
+  freetds-dev
 
 # Locale stuff
 RUN sed -i 's/^# en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/g' /etc/locale.gen \
-    && locale-gen \
-    && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
-    && useradd -ms /bin/bash worker
+  && locale-gen \
+  && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
+  && useradd -ms /bin/bash worker
 
 # Cleanup
 RUN apt-get remove --purge -yqq $buildDeps \
-    && apt-get clean \
-    && rm -rf \
-        /var/lib/apt/lists/* \
-        /tmp/* \
-        /var/tmp/* \
-        /usr/share/man \
-        /usr/share/doc \
-        /usr/share/doc-base
+  && apt-get clean \
+  && rm -rf \
+  /var/lib/apt/lists/* \
+  /tmp/* \
+  /var/tmp/* \
+  /usr/share/man \
+  /usr/share/doc \
+  /usr/share/doc-base
 
 # instant basic-lite instant oracle client
 #COPY oracle-instantclient18.5-basiclite-18.5.0.0.0-3.x86_64.rpm oracle-instantclient12.1-devel-12.1.0.2.0-1.x86_64.rpm ./
 COPY oracle-instantclient18.5-basiclite-18.5.0.0.0-3.x86_64.rpm ./
 RUN alien -i oracle-instantclient18.5-basiclite-18.5.0.0.0-3.x86_64.rpm \
-    && rm oracle-instantclient18.5-basiclite-18.5.0.0.0-3.x86_64.rpm 
+  && rm oracle-instantclient18.5-basiclite-18.5.0.0.0-3.x86_64.rpm 
 
 # instant oracle-sdk
 #RUN alien -i oracle-instantclient18.5-devel-18.5.0.0.0-3.x86_64.rpm \
@@ -95,17 +91,17 @@ WORKDIR /home/worker/
 
 # pip stuff
 RUN pip3.9 install pip --upgrade \
-    && pip3.9 install setuptools --upgrade \
-    && pip3.9 install Cython==0.29.28 \
-                   awscli==1.22.70 \
-                   boto3==1.21.15 \
-                   click==8.0.4 \
-                   cryptography==36.0.1 \
-                   petl==1.7.8 \
-                   pyasn1==0.4.8 \
-                   pyodbc==4.0.32 \
-                   pytz==2021.3 \
-                   wheel
+  && pip3.9 install setuptools --upgrade \
+  && pip3.9 install Cython==0.29.28 \
+  awscli==1.22.70 \
+  boto3==1.21.15 \
+  click==8.0.4 \
+  cryptography==36.0.1 \
+  petl==1.7.8 \
+  pyasn1==0.4.8 \
+  pyodbc==4.0.32 \
+  pytz==2021.3 \
+  wheel
 
 # FAST BUILD LINES
 COPY docker-fast-requirements.txt /docker-fast-requirements.txt
