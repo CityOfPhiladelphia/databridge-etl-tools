@@ -1,4 +1,4 @@
-FROM python:3.9.23-slim-bookworm
+FROM python:3.9.23-slim-bullseye
 
 # Add our worker users custom binaries to the path, some python packages are installed here.
 ENV PATH="/home/worker/.local/bin:${PATH}"
