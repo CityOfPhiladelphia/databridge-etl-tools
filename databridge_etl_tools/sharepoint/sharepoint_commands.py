@@ -1,5 +1,5 @@
-from .sharepoint import Sharepoint
 from .. import utils 
+from .sharepoint import Sharepoint
 import click
 
 @click.group()
