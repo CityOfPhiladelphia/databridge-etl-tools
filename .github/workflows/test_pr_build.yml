@@ -121,3 +121,16 @@ jobs:
       env:
         CARTO_USER: ${{ secrets.CARTO_USER }}
         CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
+
+    - name: Sharepoint pytests
+      run: |
+        docker run --rm dbtools \
+          pytest tests/test_sharepoint.py \
+          -s -vvv -ra --showlocals --tb=long --disable-warnings \
+          --graphapi_application_id $GRAPHAPI_APPLICATION_ID \
+          --graphapi_tenant_id $GRAPHAPI_TENANT_ID \
+          --graphapi_secret_value $GRAPHAPI_SECRET_VALUE
+      env: 
+        GRAPHAPI_APPLICATION_ID: ${{ secrets.GRAPHAPI_APPLICATION_ID }}
+        GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
+        GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}

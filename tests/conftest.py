@@ -28,6 +28,9 @@ def pytest_addoption(parser):
     parser.addoption("--ago_password", action="store", default='some_p',  help="pw for AGO login")
     parser.addoption("--carto_user", action="store", default='some_user',  help="user for Carto login")
     parser.addoption("--carto_password", action="store", default='some_pw',  help="pw for Carto login")
+    parser.addoption("--graphapi_application_id", action="store", default="some_application_id", help="Application ID for Microsoft Graph API client creation")
+    parser.addoption("--graphapi_tenant_id", action="store", default="some_tenant_id", help="Tenant ID for Microsoft Graph API client creation")
+    parser.addoption("--graphapi_secret_value", action="store", default="some_secret", help="Secret Value for Microsoft Graph API client creation")
 
 # Necessary for our tests to access the parameters/args as specified
 # Fixtures are just functions that return objects that can be used by
@@ -59,6 +62,16 @@ def carto_user(pytestconfig):
 @pytest.fixture(scope='session')
 def carto_password(pytestconfig):
     return pytestconfig.getoption("carto_password")
+
+@pytest.fixture(scope='session')
+def graphapi_tenant_id(pytestconfig):
+    return pytestconfig.getoption("graphapi_tenant_id")
+@pytest.fixture(scope='session')
+def graphapi_application_id(pytestconfig):
+    return pytestconfig.getoption("graphapi_application_id")
+@pytest.fixture(scope='session')
+def graphapi_secret_value(pytestconfig):
+    return pytestconfig.getoption("graphapi_secret_value")
 
 
 @pytest.fixture(scope='session')
