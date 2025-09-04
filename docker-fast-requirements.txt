@@ -1,3 +1,6 @@
+msgraph-beta-sdk
+azure-identity
+openpyxl
 aiofiles==22.1.0
 aiosqlite==0.18.0
 anyio==3.6.2
