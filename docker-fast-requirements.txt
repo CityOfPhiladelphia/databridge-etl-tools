@@ -113,6 +113,7 @@ prometheus-client==0.16.0
 prompt-toolkit==3.0.38
 psutil==5.9.4
 psycopg2-binary==2.9.3
+psycopg==3.2.10
 ptyprocess==0.7.0
 pure-eval==0.2.2
 pyasn1==0.4.8
