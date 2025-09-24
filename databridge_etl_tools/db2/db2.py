@@ -38,7 +38,7 @@ class Db2():
         self.oracle_conn_string = oracle_conn_string
         self.to_srid = int(to_srid) if to_srid else None
         self.staging_schema = 'etl_staging'
-        self.timeout = int(timeout) * 60 # convert minutes to seconds for "statement_timeout" in our postgres connections.
+        self.timeout = int(timeout) * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
         # use this to transform specific to more general data types for staging table
         self.data_type_map = {'character varying': 'text'}
         self.ignore_field_name = []
