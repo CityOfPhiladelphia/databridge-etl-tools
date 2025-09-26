@@ -11,6 +11,7 @@ from shapely.ops import transform as shp_transform
 import pyproj
 from pyproj import Transformer
 from pyproj.transformer import TransformerGroup
+import numpy as np
 
 class Db2():
     '''One-off functions for databridge v2 stuff'''
@@ -729,36 +730,62 @@ class Db2():
         - For 4326 -> 3857: single step.
         """
         if self.geom_info['srid'] == 2272 and self.to_srid == 3857:
-            t1 = Transformer.from_crs("EPSG:2272", "EPSG:4269", always_xy=True)
+            t1 = Transformer.from_crs("EPSG:2272", "EPSG:4269", always_xy=True)    # ftUS -> deg
+            # NOTE: 1950 is NAD83->NAD83(CSRS)(4). If you want ArcGIS “_5”, use EPSG:1515 instead.
             t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1950")
-            t3 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+            # t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1515")
+            t3 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)    # deg -> m
 
-            # Shift to more closely match ArcGIS's 3857 transformation
+            # Manual nudge to more closely match ArcGIS's 3857 transformation
             # (yes I painstakingly lined this up)
-            DX_M = -0.20   # west by 20 cm
-            DY_M = +1.18   # north by 118 cm
+            DX_M = -0.20 # west by 20 cm
+            DY_M = +1.18  # north by 118 cm
             t_shift = Transformer.from_pipeline(
-                "+proj=pipeline +step +proj=affine +s11=1 +s22=1 "
-                f"+xoff={DX_M} +yoff={DY_M}"
+                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={DX_M} +yoff={DY_M}"
             )
 
-            def reproj(x, y, z=None):
+            def reproj_vec(xyz: np.ndarray) -> np.ndarray:
+                """Shapely-2 vectorized path: xyz is (N,2) or (N,3); return same shape."""
+                x0, y0 = xyz[:, 0], xyz[:, 1]
+                has_z = (xyz.shape[1] == 3)
+                z0 = xyz[:, 2] if has_z else None
+
+                x1, y1 = t1.transform(x0, y0)      # 2272 -> 4269
+                x2, y2 = t2.transform(x1, y1)      # 4269 -> 4326  (or 1515 if you switch)
+                x3, y3 = t3.transform(x2, y2)      # 4326 -> 3857
+                x4, y4 = t_shift.transform(x3, y3) # post-shift in meters
+
+                if has_z:
+                    return np.column_stack([x4, y4, z0])  # preserve Z as-is
+                else:
+                    return np.column_stack([x4, y4])
+
+            # Shapely-1 fallback (scalar signature)
+            def reproj_scalar(x, y, z=None):
                 x, y = t1.transform(x, y)
                 x, y = t2.transform(x, y)
                 x, y = t3.transform(x, y)
                 x, y = t_shift.transform(x, y)
                 return (x, y) if z is None else (x, y, z)
 
-            return reproj
+            def reproj_auto(*args):
+                # Shapely-2 calls with (array,), Shapely-1 with (x,y[,z])
+                return reproj_vec(args[0]) if len(args) == 1 else reproj_scalar(*args)
 
+            return reproj_auto
+            
         if self.geom_info['srid'] == 4326 and self.to_srid == 3857:
             t = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-
-            def reproj(x, y, z=None):
-                x, y = t.transform(x, y)
-                return (x, y) if z is None else (x, y, z)
-
-            return reproj
+            def reproj_auto(*args):
+                if len(args) == 1:
+                    xyz = args[0]
+                    x, y = t.transform(xyz[:, 0], xyz[:, 1])
+                    return np.column_stack([x, y]) if xyz.shape[1] == 2 else np.column_stack([x, y, xyz[:, 2]])
+                else:
+                    x, y, z = (args + (None,))[:3]
+                    x, y = t.transform(x, y)
+                    return (x, y) if z is None else (x, y, z)
+            return reproj_auto
 
         raise ValueError(
             f"This script currently supports src SRID 2272 or 4326 to dst 3857. Got {self.geom_info['srid']} -> {self.to_srid}."
@@ -862,9 +889,16 @@ class Db2():
                     cur.execute(alter_owner)
                     conn.commit()
 
+                delete_stmt = sql.SQL('DELETE FROM {schema}.{table}').format(
+                    schema=sql.Identifier(self.enterprise_schema),
+                    table=sql.Identifier(dest_table)
+                )
+                print('Running delete_stmt: ' + str(delete_stmt))
+                cur.execute(delete_stmt)
+                conn.commit()
 
-            # Stream, transform, insert
-            self.copy_rows_transformed(dest_table, reproj)
+                # Stream, transform, insert
+                self.copy_rows_transformed(dest_table, reproj)
 
         with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
             with conn.cursor() as cur:
