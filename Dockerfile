@@ -103,11 +103,6 @@ RUN pip3.9 install pip --upgrade \
   pytz==2021.3 \
   wheel
 
-# FAST BUILD LINES
-COPY docker-fast-requirements.txt /docker-fast-requirements.txt
-RUN pip3 install -r /docker-fast-requirements.txt
-########################
-
 # Per WORKDIR above, these should be placed in /home/worker/
 COPY --chown=worker:root scripts/entrypoint.sh ./entrypoint.sh
 COPY --chown=worker:root tests/ ./tests/

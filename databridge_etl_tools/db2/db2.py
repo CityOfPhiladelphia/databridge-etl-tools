@@ -4,7 +4,6 @@ import click
 import json
 import psycopg
 from psycopg import sql
-import cx_Oracle
 import re
 from shapely import wkb
 from shapely.ops import transform as shp_transform
@@ -17,14 +16,12 @@ class Db2():
     '''One-off functions for databridge v2 stuff'''
     _staging_dataset_name = None
     _enterprise_dataset_name = None
-    _oracle_cursor = None
 
     def __init__(self,
                 table_name,
                 account_name,
                 copy_from_source_schema = None,
                 enterprise_schema = None,
-                oracle_conn_string = None,
                 libpq_conn_string = None,
                 index_fields = None,
                 to_srid = None,
@@ -36,7 +33,6 @@ class Db2():
         self.enterprise_schema = enterprise_schema
         self.libpq_conn_string = libpq_conn_string
         self.index_fields = index_fields.split(',') if index_fields else None
-        self.oracle_conn_string = oracle_conn_string
         self.to_srid = int(to_srid) if to_srid else None
         self.staging_schema = 'etl_staging'
         self.timeout = int(timeout) * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
@@ -50,14 +46,6 @@ class Db2():
         self.m = None
         self.z = None
 
-
-    @property
-    def oracle_cursor(self):
-        if self._oracle_cursor is None: 
-            conn = cx_Oracle.connect(self.oracle_conn_string)
-            conn.autocommit = True
-            self._oracle_cursor = conn.cursor()
-        return self._oracle_cursor
 
     @property
     def staging_dataset_name(self):
@@ -655,68 +643,6 @@ class Db2():
                         cur.execute('ROLLBACK;')
 
                 print('\nSuccess!')
-
-    def update_oracle_scn(self):
-        
-        # Commenting this out, instead lets pull the SCN from our recorded table
-        #stmt = f'''SELECT MAX(ora_rowscn) FROM {self.account_name}.{self.table_name.upper()}'''
-        #print('Executing stmt: ' + str(stmt))
-        #self.oracle_cursor.execute(stmt)
-        #current_scn = self.oracle_cursor.fetchone()[0]
-
-        stmt=f'''
-            SELECT SCN FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-            WHERE TABLE_OWNER = '{self.account_name.upper()}'
-            AND TABLE_NAME = '{self.table_name.upper()}'
-            AND STATUS = 'RUNNING'
-        '''
-        self.oracle_cursor.execute(stmt)
-        current_scn = self.oracle_cursor.fetchone()
-
-        # If there is no SCN available, insert NULL which will work in an INT datatype column.
-        if not current_scn:
-            current_scn = 'NULL'
-        else:
-            current_scn = current_scn[0]
-
-        stmt=f'''
-            SELECT SCN FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-            WHERE TABLE_OWNER = '{self.account_name.upper()}'
-            AND TABLE_NAME = '{self.table_name.upper()}'
-            AND STATUS = 'FINISHED'
-        '''
-        print('Executing stmt: ' + str(stmt))
-        self.oracle_cursor.execute(stmt)
-        old_scn = self.oracle_cursor.fetchone()
-
-        # Because Oracle is an outdated database product, we don't have upsert and need to do
-        # either an insert or update depending if the row we want already exists.
-        if old_scn is None:
-            stmt = f'''
-            INSERT INTO GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY (TABLE_OWNER, TABLE_NAME, SCN, STATUS)
-                VALUES('{self.account_name.upper()}', '{self.table_name.upper()}', {current_scn}, 'FINISHED')
-            '''
-        elif old_scn:
-            stmt = f'''
-            UPDATE GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY SET SCN={current_scn}
-                WHERE TABLE_OWNER = '{self.account_name.upper()}'
-                AND TABLE_NAME = '{self.table_name.upper()}'
-                AND STATUS = 'FINISHED'
-            '''
-        print('Executing stmt: ' + str(stmt))
-        self.oracle_cursor.execute(stmt)
-    
-        # Remove RUNNING scn from the history table
-        if current_scn:
-            stmt=f'''
-                DELETE FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-                WHERE TABLE_OWNER = '{self.account_name.upper()}'
-                AND TABLE_NAME = '{self.table_name.upper()}'
-                AND STATUS = 'RUNNING'
-            '''
-            print('Executing stmt: ' + str(stmt))
-            self.oracle_cursor.execute(stmt)
-
 
     def build_reprojector(self):
         """

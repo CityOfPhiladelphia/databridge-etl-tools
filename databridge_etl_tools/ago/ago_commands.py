@@ -7,7 +7,7 @@ import click
 @click.option('--ago_org_url', required=True)
 @click.option('--ago_user', required=True)
 @click.option('--ago_pw', required=True)
-@click.option('--ago_item_name', required=True)
+@click.option('--ago_item_name', required=True, help='Must match the AGO "service name" exactly.')
 @click.option('--s3_bucket', required=False)
 @click.option('--s3_key', required=False)
 def ago(ctx, **kwargs):
@@ -63,10 +63,3 @@ def post_index_fields(ctx, **kwargs):
     '''Post index fields to AGO'''
     ago = AGO(**ctx.obj, **kwargs)
     ago.post_index_fields()
-
-@ago.command()
-@click.pass_context
-def export(ctx):
-    """Export from an AGO dataset into a csv file in S3"""
-    ago = AGO(**ctx.obj)
-    ago.export()
