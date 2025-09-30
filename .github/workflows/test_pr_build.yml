@@ -47,13 +47,6 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
 
-    - name: Pull Oracle Instant Client rpm from S3
-      id: pull-oracle-rpm 
-      run: bash ./scripts/pull-oracle-rpm.sh
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
     # Prune docker system to clear space
     - name: docker system purne
       run: |
@@ -85,20 +78,6 @@ jobs:
         POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
         POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-
-        #    - name: Oracle pytests
-        #      run: |
-        #          docker run --rm dbtools \
-        #          pytest tests/test_oracle.py \
-        #          -vvv -ra --showlocals --tb=long --disable-warnings \
-        #            --user GIS_TEST \
-        #            --password $ORACLE_PASSWORD \
-        #            --host $ORACLE_HOST \
-        #            --database $ORACLE_DB
-        #      env:
-        #        ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
-        #        ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
-        #        ORACLE_DB: ${{ secrets.ORACLE_DB }}
 
     - name: AGO pytests
       run: |
