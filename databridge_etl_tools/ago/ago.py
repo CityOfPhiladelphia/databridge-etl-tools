@@ -519,7 +519,8 @@ class AGO():
         self._num_rows_in_upload_file = rows.nrows()
         row_dicts = rows.dicts()
 
-        # First we should check that we can parse geometry before proceeding with truncate
+        # First we should check that we can parse geometry before proceeding with truncate.
+        # Find a single non-geometric row and try parsing it's geometry.
         if self.geometric:
             loop_counter = 0
             # keep looping for awhile until we get a non-blank geom value
@@ -528,7 +529,7 @@ class AGO():
                 if loop_counter > 500:
                     break
                 loop_counter += 1
-                wkt = row.pop('shape')
+                wkt = row['shape']
 
                 # Set WKT to empty string so next conditional doesn't fail on a Nonetype
                 if not wkt.strip():
@@ -563,59 +564,38 @@ class AGO():
 
         # loop through and accumulate appends into adds[]
         adds = []
-        if not self.geometric:
-            for i, row in enumerate(row_dicts):
-                # clean up row and perform basic non-geometric transformations
-                row = self.format_row(row)
+        for i, row in enumerate(row_dicts):
+            # clean up row and perform basic non-geometric transformations
+            row = self.format_row(row)
 
-                adds.append({"attributes": row})
-                if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
-                    start = time()
-                    row_count = i+1
-                    print(f'Adding batch of {len(adds)}, at row #: {row_count}...')
-                    self.edit_features(rows=adds, row_count=row_count, method='addFeatures')
-                    adds = []
-                    print(f'Duration: {time() - start}\n')
-            if adds:
-                start = time()
-                row_count = i+1
-                print(f'Adding last batch of {len(adds)}, at row #: {row_count}...')
-                self.edit_features(rows=adds, row_count=row_count, method='addFeatures')
-                print(f'Duration: {time() - start}\n')
-        elif self.geometric:
-            for i, row in enumerate(row_dicts):
-                row_count = i + 1
-                # clean up row and perform basic non-geometric transformations
-                row = self.format_row(row)
-
+            if self.geometric:
                 # remove the shape field so we can replace it with SHAPE with the spatial reference key
                 # and also store in 'wkt' var (well known text) so we can project it
                 wkt = row.pop('shape')
-
                 geom_dict = self.convert_geometry(wkt)
-
                 # Create our formatted row with properly made AGO geometry
                 formatted_row = {"attributes": row,
                                 "geometry": geom_dict
                                 }
+            else:
+                formatted_row = {"attributes": row}
+            adds.append(formatted_row)
 
-                adds.append(formatted_row)
-
-                if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
-                    print(f'Adding batch of {len(adds)}, at row #: {row_count}...')
-                    start = time()
-                    self.edit_features(rows=adds, method='addFeatures')
-
-                    adds = []
-                    print(f'Duration: {time() - start}\n')
-            # add leftover rows outside the loop if they don't add up to 4000
-            if adds:
+            # Apply once we reach out designated batch amount then reset
+            if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
                 start = time()
-                print(f'Adding last batch of {len(adds)}, at row #: {i+1}...')
-                #print(f'Example row: {adds[0]}')
-                #print(f'batch: {adds}')
+                row_count = i+1
+                print(f'Adding batch of adds ({len(adds)} rows) at row #: {row_count}...')
                 self.edit_features(rows=adds, method='addFeatures')
-                print(f'Duration: {time() - start}')
+                adds = []
+                print(f'Duration: {time() - start}\n')
+        # For any leftover rows that didn't make a full batch
+        if adds:
+            start = time()
+            row_count = i+1
+            print(f'Adding last batch of adds ({len(adds)} rows) at row #: {row_count}...')
+            self.edit_features(rows=adds, method='addFeatures')
+            print(f'Duration: {time() - start}\n')
 
         ago_count = self.layer_count
         print(f'count after batch adds: {str(ago_count)}')
@@ -623,13 +603,19 @@ class AGO():
 
 
     def edit_features(self, rows, method):
+        '''
+        ESRI docs:
+        https://developers.arcgis.com/rest/services-reference/enterprise/add-features/
+        https://developers.arcgis.com/rest/services-reference/enterprise/delete-features/
+        https://developers.arcgis.com/rest/services-reference/enterprise/update-features/
+        '''
         edit_url = f'https://services.arcgis.com/{self.ago_org_id}/arcgis/rest/services/{self.ago_item_name}/FeatureServer/{self.layer_num}/{method}'
         resp = requests.post(
             edit_url,
             data={
                 "f": "json",
                 "token": self.ago_token,
-                "rollbackOnFailure": "true",
+                "rollbackOnFailure": "false",
                 "features": json.dumps(rows)
             },
             timeout=30,
@@ -749,7 +735,11 @@ class AGO():
         Then using the AGO API "edit_features", we pass the rows as "updates", and AGO should know what rows to
         update based on the matching objectid. The CSV objectid is ignored (which is also true for appends actually).
 
-        For new rows, it will pass them as "addFeatures" into the edit_features api, and they'll be appended into the ago item.
+        For new rows, it will pass them into the "addFeatures" api endpoint.
+        For rows that do exist, it will pass them to "updateFeatures".
+
+        NOTE: This will not delete rows UNLESS it finds rows with the same primary key in AGO. If it finds two rows
+        with the same primary key, it will delete the second one.
         '''
         # Assert we got a primary_key passed and it's not None.
         assert self.primary_key
@@ -774,169 +764,94 @@ class AGO():
             elif 'esri_oid' in row_differences and len(row_differences) == 1:
                 pass
             else:
-                print(f'Row differences found!: {row_differences}')
-                assert tuple(self.fields.keys()) == rows.fieldnames()
+                assert tuple(self.fields.keys()) == rows.fieldnames(), f'Row differences found!: {row_differences}'
         print('Fields are the same! Continuing.')
 
         self._num_rows_in_upload_file = rows.nrows()
         row_dicts = rows.dicts()
         adds = []
         updates = []
-        if not self.geometric:
-            for i, row in enumerate(row_dicts):
-                row_count = i + 1
+        for i, row in enumerate(row_dicts):
+            row_count = i+1
+            # We need an OBJECTID in our row for upserting. Assert that we have that, bomb out if we don't
+            assert row['objectid']
 
-                # We need an OBJECTID in our row for upserting. Assert that we have that, bomb out if we don't
-                assert row['objectid']
+            # clean up row and perform basic non-geometric transformations
+            row = self.format_row(row)
 
-                # clean up row and perform basic non-geometric transformations
-                row = self.format_row(row)
+            # Figure out if row exists in AGO, and what it's object ID is.
+            row_primary_key = row[self.primary_key]
+            wherequery = f"{self.primary_key} = '{row_primary_key}'"
+            ago_row = self.query_features(wherequery=wherequery)
 
-                # Figure out if row exists in AGO, and what it's object ID is.
-                row_primary_key = row[self.primary_key]
-                wherequery = f"{self.primary_key} = '{row_primary_key}'"
-                ago_row = self.query_features(wherequery=wherequery)
+            # Should be length 0 or 1
+            # If we got two or more, we're doubled up and we can delete one.
+            if len(ago_row) == 2:
+                print(f'Got two results for one primary key "{row_primary_key}". Deleting second one.')
+                # Delete the 2nd one.
+                del_objectid = ago_row[1]['attributes']['objectid']
+                # Docs say you can simply pass only the ojbectid as a string and it should work.
+                self.edit_features(rows=str(del_objectid), method='deleteFeatures')
+            # Should be length 0 or 1
+            elif len(ago_row) > 1:
+                raise AssertionError(f'Should have only gotten 1 or 0 rows from AGO! Instead we got: {len(ago_row)}')
 
-                # Should be length 0 or 1
-                # If we got two or more, we're doubled up and we can delete one.
-                if len(ago_row.sdf) == 2:
-                    print(f'Got two results for one primary key "{row_primary_key}". Deleting second one.')
-                    # Delete the 2nd one.
-                    del_objectid = ago_row.sdf.iloc[1]['OBJECTID']
-                    # Docs say you can simply pass only the ojbectid as a string and it should work.
-                    self.edit_features(rows=str(del_objectid), row_count=row_count, method='deleteFeatures')
-                # If it's more than 2, then just except out.
-                elif len(ago_row.sdf) > 1:
-                    raise AssertionError(f'Should have only gotten 1 or 0 rows from AGO! Instead we got: {len(ago_row.sdf)}')
+            # If our row is in AGO, then we need the objectid for the upsert/update
+            if ago_row:
+                ago_objectid = ago_row[0]['attributes']['objectid']
+            else:
+                ago_objectid = False
 
-                # If our row is in AGO, then we need the objectid for the upsert/update
-                if not ago_row.sdf.empty:
-                    ago_objectid = ago_row.sdf.iloc[0]['OBJECTID']
-                else:
-                    #print(f'DEBUG! ago_row is empty?: {ago_row}')
-                    print(ago_row.sdf)
-                    ago_objectid = False
+            # Reassign the objectid or assign it to match the row in AGO. This will
+            # make it work with AGO's 'updates' endpoint and work like an upsert.
+            row['objectid'] = ago_objectid
 
-                #print(f'DEBUG! ago_objectid: {ago_objectid}')
-    
-                # Reassign the objectid or assign it to match the row in AGO. This will
-                # make it work with AGO's 'updates' endpoint and work like an upsert.
-                row['objectid'] = ago_objectid
-
-                # If we didn't get anything back from AGO, then we can simply append our row
-                if ago_row.sdf.empty:
-                    adds.append({"attributes": row})
-
-                # If we did get something back from AGO, then we're upserting our row
-                if ago_objectid:
-                    updates.append({"attributes": row})
-
-                if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
-                    start = time()
-                    print(f'(non geometric) Adding batch of appends, {len(adds)}, at row #: {row_count}...')
-                    self.edit_features(rows=adds, method='addFeatures')
-                    adds = []
-                    print(f'Duration: {time() - start}\n')
-                if (len(updates) != 0) and (len(adds) % self.batch_size == 0):
-                    start = time()
-                    print(f'(non geometric) Adding batch of updates {len(updates)}, at row #: {row_count}...')
-                    self.edit_features(rows=updates, method='updateFeatures')
-                    updates = []
-                    print(f'Duration: {time() - start}\n')
-            if adds:
-                start = time()
-                print(f'(non geometric) Adding last batch of appends, {len(adds)}, at row #: {row_count}...')
-                self.edit_features(rows=adds, method='addFeatures')
-                print(f'Duration: {time() - start}\n')
-            if updates:
-                start = time()
-                print(f'(non geometric) Adding last batch of updates, {len(updates)}, at row #: {row_count}...')
-                self.edit_features(rows=updates, method='updateFeatures')
-                print(f'Duration: {time() - start}\n')
-
-        elif self.geometric:
-            for i, row in enumerate(row_dicts):
-                row_count = i+1
-                # We need an OBJECTID in our row for upserting. Assert that we have that, bomb out if we don't
-                assert row['objectid']
-
-                # clean up row and perform basic non-geometric transformations
-                row = self.format_row(row)
-
-                # Figure out if row exists in AGO, and what it's object ID is.
-                row_primary_key = row[self.primary_key]
-                wherequery = f"{self.primary_key} = '{row_primary_key}'"
-                ago_row = self.query_features(wherequery=wherequery)
-
-                # Should be length 0 or 1
-                # If we got two or more, we're doubled up and we can delete one.
-                if len(ago_row.sdf) == 2:
-                    print(f'Got two results for one primary key "{row_primary_key}". Deleting second one.')
-                    # Delete the 2nd one.
-                    del_objectid = ago_row.sdf.iloc[1]['OBJECTID']
-                    # Docs say you can simply pass only the ojbectid as a string and it should work.
-                    self.edit_features(rows=str(del_objectid), method='deleteFeatures')
-                # Should be length 0 or 1
-                elif len(ago_row.sdf) > 1:
-                    raise AssertionError(f'Should have only gotten 1 or 0 rows from AGO! Instead we got: {len(ago_row.sdf)}')
-
-                # If our row is in AGO, then we need the objectid for the upsert/update
-                if not ago_row.sdf.empty:
-                    ago_objectid = ago_row.sdf.iloc[0]['OBJECTID']
-                else:
-                    ago_objectid = False
-
-                #print(f'DEBUG! ago_objectid: {ago_objectid}')
-    
-                # Reassign the objectid or assign it to match the row in AGO. This will
-                # make it work with AGO's 'updates' endpoint and work like an upsert.
-                row['objectid'] = ago_objectid
-
+            if self.geometric:
                 # remove the shape field so we can replace it with SHAPE with the spatial reference key
                 # and also store in 'wkt' var (well known text) so we can project it
                 wkt = row.pop('shape')
-                
                 geom_dict = self.convert_geometry(wkt)
-
                 # Once we're done our shape stuff, put our row into it's final format
                 formatted_row = {"attributes": row,
-                                 "geometry": geom_dict
-                                 }
+                                "geometry": geom_dict
+                                }
+            else:
+                formatted_row = {"attributes": row}
 
-                # If we didn't get anything back from AGO, then we can simply append our row
-                if ago_row.sdf.empty:
-                    adds.append(formatted_row)
 
-                # If we did get something back from AGO, then we're upserting our row
-                if ago_objectid:
-                    updates.append(formatted_row)
-
-                if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
-                    print(f'Adding batch of appends, {len(adds)}, at row #: {row_count}...')
-                    start = time()
-                    self.edit_features(rows=adds, method='addFeatures')
-
-                    adds = []
-                    print(f'Duration: {time() - start}\n')
-
-                if (len(updates) != 0) and (len(updates) % self.batch_size == 0):
-                    print(f'Adding batch of updates, {len(updates)}, at row #: {row_count}...')
-                    start = time()
-                    self.edit_features(rows=updates, method='updateFeatures')
-
-                    updates = []
-                    print(f'Duration: {time() - start}\n')
-            # add leftover rows outside the loop if they don't add up to 4000
-            if adds:
+            if not ago_row:
+                adds.append(formatted_row)    
+            # If we did get something back from AGO, then we're upserting our row
+            if ago_objectid:
+                updates.append(formatted_row)
+            
+            # Apply once we reach out designated batch amount then reset
+            if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
+                print(f'Adding batch of appends ({len(adds)} rows) at row #: {row_count}...')
                 start = time()
-                print(f'Adding last batch of appends, {len(adds)}, at row #: {row_count}...')
-                self.edit_features(rows=adds, row_count=row_count, method='addFeatures')
-                print(f'Duration: {time() - start}')
-            if updates:
+                self.edit_features(rows=adds, method='addFeatures')
+
+                adds = []
+                print(f'Duration: {time() - start}\n')
+
+            if (len(updates) != 0) and (len(updates) % self.batch_size == 0):
+                print(f'Adding batch of updates ({len(updates)} rows) at row #: {row_count}...')
                 start = time()
-                print(f'Adding last batch of updates, {len(updates)}, at row #: {row_count}...')
-                self.edit_features(rows=updates, row_count=row_count, method='updateFeatures')
-                print(f'Duration: {time() - start}')
+                self.edit_features(rows=updates, method='updateFeatures')
+
+                updates = []
+                print(f'Duration: {time() - start}\n')
+        # For any leftover rows that didn't make a full batch
+        if adds:
+            start = time()
+            print(f'Adding last batch of appends ({len(adds)} rows) at row #: {row_count}...')
+            self.edit_features(rows=adds, method='addFeatures')
+            print(f'Duration: {time() - start}')
+        if updates:
+            start = time()
+            print(f'Adding last batch of updates ({len(updates)} rows) at row #: {row_count}...')
+            self.edit_features(rows=updates, method='updateFeatures')
+            print(f'Duration: {time() - start}')
 
 
     @property
@@ -954,6 +869,8 @@ class AGO():
 
         features = []
         result_offset = 0
+        query_url = self.ago_rest_url + f'/{self.layer_num}' + '/query'
+
         while True:
             QUERY_PARAMS = {
                 "where": wherequery,
@@ -964,19 +881,20 @@ class AGO():
                 "resultOffset": result_offset,
                 "resultRecordCount": batch_fetch_amount
             }
-            response = requests.get(self.ago_rest_url + '/query', params=QUERY_PARAMS)
+            response = requests.get(query_url, params=QUERY_PARAMS)
             response.raise_for_status()
+            if not response.status_code == 200:
+                raise AssertionError("Error querying AGO! Status code: " + str(response.status_code) + "\nResponse text: " + response.text + "\nQuery used: " + query_url + str(QUERY_PARAMS))
             if "Cannot perform query. Invalid query parameters." in response.text:
-                raise AssertionError("ESRI returned an error: " + response.text + "\nQuery used: " + self.ago_rest_url + '/query' + str(QUERY_PARAMS))
+                raise AssertionError("ESRI returned an error: " + response.text + "\nQuery used: " + query_url + str(QUERY_PARAMS))
             data = response.json()
             current_features = data.get("features", [])
             if not current_features:
-                print('Done fetching data from AGO.\n')
-                print(response.text)
+                #print('Done fetching data from AGO.\n')
                 break
             features.extend(current_features)
             result_offset += len(current_features)
-            print(f"Fetched {len(current_features)} records, total so far: {len(features)}")
+            #print(f"Fetched {len(current_features)} records, total so far: {len(features)}")
         return features
 
 
