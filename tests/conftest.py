@@ -2,7 +2,7 @@
 import pytest
 import os
 
-from moto.s3 import mock_s3
+from moto import mock_aws
 import boto3
 
 from .constants import (

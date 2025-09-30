@@ -20,7 +20,7 @@ from time import sleep, time
 import dateutil.parser
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AGO():
@@ -460,8 +460,10 @@ class AGO():
                 # then try parsing with dateutil parser
                 try:
                     adate = dateutil.parser.parse(row[col])
-                    # if parse above works, convert
-                    row[col] = adate
+                    if adate.tzinfo is None:
+                        adate = adate.replace(tzinfo=timezone.est)
+                    row[col] = int(adate.astimezone(timezone.utc).timestamp() * 1000)
+
                 except KeyboardInterrupt as e:
                     raise e
                 except dateutil.parser._parser.ParserError as e:
@@ -480,9 +482,9 @@ class AGO():
         '''
 
         # First assert that our item in AGO has "create" capabilities:
-
-        if 'Create' not in self.ago_metadata['capabilities']:
-            raise AssertionError(f'Item in AGO does not have "Create" capabilities, cannot append! Please enable editing. Capabilities are: {self.ago_metadata["capabilities"]}')
+        # Actually I don't think this is necessary maybe?
+        #if 'Create' not in self.ago_metadata['capabilities']:
+        #    raise AssertionError(f'Item in AGO does not have "Create" capabilities, cannot append! Please enable editing. Capabilities are: {self.ago_metadata["capabilities"]}')
 
         try:
             rows = etl.fromcsv(self.csv_path, encoding='utf-8')
@@ -914,9 +916,14 @@ class AGO():
         json_local_path = '/tmp/' + self.ago_item_name + '_schema.json'
         try:
             s3.Object(self.s3_bucket, self.json_schema_s3_key).download_file(json_local_path)
+            with open(json_local_path) as json_file:
+                schema = json.load(json_file).get('fields', '')
+            schema_fields_info = schema
         except botocore.exceptions.ClientError as e:
+            schema_fields_info = None
             if e.response['Error']['Code'] == "404":
-                raise AssertionError(f'CSV file doesnt appear to exist in S3! key: {self.json_schema_s3_key}')
+                print(f'CSV file doesnt appear to exist in S3! key: {self.json_schema_s3_key}')
+                print(f'Cannot determine if fields are unique in the Database and need a unique index.')
             else:
                 raise e
         with open(json_local_path) as json_file:
@@ -999,10 +1006,12 @@ class AGO():
         for field in self.index_fields.split(','):
             # Loop through the json schema file and look for uniques
             is_unique = 'false'
-            for field_dict in schema_fields_info:
-                if field_dict['name'] == field:
-                    if 'unique' in field_dict.keys():
-                        is_unique = field_dict['unique']
+            # only loop through if we found a json schema file
+            if schema_fields_info:
+                for field_dict in schema_fields_info:
+                    if field_dict['name'] == field:
+                        if 'unique' in field_dict.keys():
+                            is_unique = field_dict['unique']
 
             post_index(field, is_unique)
             sleep(2)

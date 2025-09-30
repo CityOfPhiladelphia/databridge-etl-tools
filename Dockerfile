@@ -11,6 +11,7 @@ RUN useradd -ms /bin/bash worker
 
 RUN apt-get update && \
   apt-get install -yqq --no-install-recommends \
+  libpq-dev \
   apt-utils \
   build-essential \
   ca-certificates \
@@ -35,17 +36,27 @@ RUN apt-get remove --purge -yqq $buildDeps \
 USER worker
 WORKDIR /home/worker/
 
-# Per WORKDIR above, these should be placed in /home/worker/
 COPY --chown=worker:root scripts/entrypoint.sh ./entrypoint.sh
-COPY --chown=worker:root tests/ ./tests/
-COPY --chown=worker:root pyproject.toml ./pyproject.toml
-COPY --chown=worker:root databridge_etl_tools ./databridge_etl_tools
-
 RUN chmod +x ./entrypoint.sh
 
-# pip stuff
+# Put our pip installs, but not our own module install, here first so we can more rapidly build.
+# pip installs take the longest.
 RUN pip install pip --upgrade \
   && pip install setuptools --upgrade
+# Funny command to install dependencies directly from pyproject.toml, that way we don't have to
+# maintain a separate requirements.txt file.
+COPY --chown=worker:root pyproject.toml ./pyproject.toml
+RUN python - <<'PY' >/tmp/pyproject-toml-reqs.txt
+import importlib
+import tomllib as tl
+with open("pyproject.toml","rb") as f:
+    deps = tl.load(f)["project"]["dependencies"]
+print("\n".join(deps))
+PY
+RUN pip install --no-cache-dir -r /tmp/pyproject-toml-reqs.txt
+
+COPY --chown=worker:root tests/ ./tests/
+COPY --chown=worker:root databridge_etl_tools ./databridge_etl_tools
 
 # Python syntax check
 RUN python -m compileall ./databridge_etl_tools
