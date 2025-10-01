@@ -1432,17 +1432,18 @@ class AGO():
         # We will loop through it and see if any of these fields are unique.
         s3 = boto3.resource('s3')
         json_local_path = '/tmp/' + self.item_name + '_schema.json'
+        schema_fields_info = None
         try:
             s3.Object(self.s3_bucket, self.json_schema_s3_key).download_file(json_local_path)
+            with open(json_local_path) as json_file:
+                schema = json.load(json_file).get('fields', '')
+            schema_fields_info = schema
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == "404":
-                raise AssertionError(f'CSV file doesnt appear to exist in S3! key: {self.json_schema_s3_key}')
+                print(f'CSV file doesnt appear to exist in S3! key: {self.json_schema_s3_key}')
+                print(f'Cannot determine if fields are unique in the Database and need a unique index.')
             else:
                 raise e
-        with open(json_local_path) as json_file:
-            schema = json.load(json_file).get('fields', '')
-        schema_fields_info = schema
-
 
         def post_index(field, is_unique):
             '''script that actually does the posting'''
@@ -1519,10 +1520,12 @@ class AGO():
         for field in self.index_fields.split(','):
             # Loop through the json schema file and look for uniques
             is_unique = 'false'
-            for field_dict in schema_fields_info:
-                if field_dict['name'] == field:
-                    if 'unique' in field_dict.keys():
-                        is_unique = field_dict['unique']
+            # only loop through if we found a json schema file
+            if schema_fields_info:
+                for field_dict in schema_fields_info:
+                    if field_dict['name'] == field:
+                        if 'unique' in field_dict.keys():
+                            is_unique = field_dict['unique']
 
             post_index(field, is_unique)
             sleep(2)
