@@ -926,10 +926,6 @@ class AGO():
                 print(f'Cannot determine if fields are unique in the Database and need a unique index.')
             else:
                 raise e
-        with open(json_local_path) as json_file:
-            schema = json.load(json_file).get('fields', '')
-        schema_fields_info = schema
-
 
         def post_index(field, is_unique):
             '''script that actually does the posting'''
