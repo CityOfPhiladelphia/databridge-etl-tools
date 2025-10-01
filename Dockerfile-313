@@ -1,4 +1,4 @@
-FROM python:3.12.11-slim-trixie
+FROM python:3.13-slim-trixie
 
 # Add our worker users custom binaries to the path, some python packages are installed here.
 ENV PATH="/home/worker/.local/bin:${PATH}"

@@ -255,10 +255,10 @@ class AGO():
         to what our source dataset is currently, we don't need to project.'''
         if self._projection is None:
             if str(self.in_srid) == str(self.ago_metadata['spatialReference']['latestWkid']):
-                print(f'source SRID detected as same as AGO srid, not projecting. source: {self.in_srid}, ago: {self.ago_metadata['spatialReference']['latestWkid']}\n')
+                print(f"source SRID detected as same as AGO srid, not projecting. source: {self.in_srid}, ago: {self.ago_metadata['spatialReference']['latestWkid']}\n")
                 self._projection = False
             else:
-                print(f'Shapes will be projected. source: "{self.in_srid}", ago: "{self.ago_metadata['spatialReference']['latestWkid']}"\n')
+                print(f"Shapes will be projected. source: {self.in_srid}, ago: {self.ago_metadata['spatialReference']['latestWkid']}\n")
                 self._projection = True
         return self._projection
 
@@ -346,8 +346,8 @@ class AGO():
     def transformer(self):
         '''transformer needs to be defined outside of our row loop to speed up projections.'''
         if self._transformer is None:
-            self._transformer = pyproj.Transformer.from_crs(f'epsg:{self.in_srid}',
-                                                      f'epsg:{str(self.ago_metadata['spatialReference']['latestWkid'])}',
+            self._transformer = pyproj.Transformer.from_crs(f"epsg:{self.in_srid}",
+                                                      f"epsg:{str(self.ago_metadata['spatialReference']['latestWkid'])}",
                                                       always_xy=True)
         return self._transformer
 

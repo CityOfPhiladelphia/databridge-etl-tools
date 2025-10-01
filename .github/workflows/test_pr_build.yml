@@ -53,13 +53,15 @@ jobs:
          yes | docker system prune
 
     # Build our docker container and insert our AWS secret keys
+    # no-cache so we're sure we're getting all changes (such as geopetl changes)
+    # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
     - name: Build docker container
       run: |
          docker build -t dbtools \
          --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
          --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
          --no-cache \
-          .
+         -f Dockerfile-312 .
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
