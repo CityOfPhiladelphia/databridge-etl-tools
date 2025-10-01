@@ -36,9 +36,6 @@ RUN apt-get remove --purge -yqq $buildDeps \
 USER worker
 WORKDIR /home/worker/
 
-COPY --chown=worker:root scripts/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
-
 # Put our pip installs, but not our own module install, here first so we can more rapidly build.
 # pip installs take the longest.
 RUN pip install pip --upgrade \
@@ -47,7 +44,6 @@ RUN pip install pip --upgrade \
 # maintain a separate requirements.txt file.
 COPY --chown=worker:root pyproject.toml ./pyproject.toml
 RUN python - <<'PY' >/tmp/pyproject-toml-reqs.txt
-import importlib
 import tomllib as tl
 with open("pyproject.toml","rb") as f:
     deps = tl.load(f)["project"]["dependencies"]
@@ -55,6 +51,7 @@ print("\n".join(deps))
 PY
 RUN pip install --no-cache-dir -r /tmp/pyproject-toml-reqs.txt
 
+COPY --chown=worker:root scripts/entrypoint.sh ./entrypoint.sh
 COPY --chown=worker:root tests/ ./tests/
 COPY --chown=worker:root databridge_etl_tools ./databridge_etl_tools
 
@@ -73,4 +70,5 @@ ARG AWS_SECRET_ACCESS_KEY
 ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
 ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
 
+RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["/home/worker/entrypoint.sh"]
