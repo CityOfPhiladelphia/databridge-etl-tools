@@ -23,6 +23,9 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
+    "apache-airflow", #to allow to be used by the KubernetesExecutor
+    "asyncpg", # Needed for airflow
+    "statsd", # Needed for airflow
     "setuptools",
     "boto3",
     "botocore",
@@ -56,11 +59,11 @@ dependencies = [
     "hurry.filesize", 
     "smart_open", 
     "retrying",
-    "azure-core",
-    "azure-identity",
-    "msgraph-core",
-    "msgraph-beta-sdk",
-    "openpyxl"
+    "azure-core", # Necessary for sharepoint
+    "azure-identity", # Necessary for sharepoint
+    "msgraph-core", # Necessary for sharepoint
+    "msgraph-beta-sdk", # Necessary for sharepoint
+    "openpyxl" # Necessary for sharepoint
 ]
 
 # installs our command as a cli runnable script

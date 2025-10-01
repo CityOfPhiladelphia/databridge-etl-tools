@@ -59,6 +59,7 @@ class AGO():
         # Our org id, publicly viewable so fine to hardcode.
         self.ago_org_id = 'fLeGjb7u4uXqeF9q'
         self.ago_rest_url = f'https://services.arcgis.com/{self.ago_org_id}/arcgis/rest/services/{ago_item_name}/FeatureServer'
+        print(f'Working against AGO REST URL: {self.ago_rest_url}\n')
         self.index_fields = kwargs.get('index_fields', None)
         self.in_srid = kwargs.get('in_srid', None)
         self.clean_columns = kwargs.get('clean_columns', None)

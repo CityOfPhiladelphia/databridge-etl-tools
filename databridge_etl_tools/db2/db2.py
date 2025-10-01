@@ -35,7 +35,7 @@ class Db2():
         self.index_fields = index_fields.split(',') if index_fields else None
         self.to_srid = int(to_srid) if to_srid else None
         self.staging_schema = 'etl_staging'
-        self.timeout = int(timeout) * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
+        self.timeout = int(timeout) * 60 * 1000 if timeout else 50 * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
         # use this to transform specific to more general data types for staging table
         self.data_type_map = {'character varying': 'text'}
         self.ignore_field_name = []
@@ -68,16 +68,18 @@ class Db2():
         if not schema and not table:
             exist_stmt = f"SELECT to_regclass('{self.enterprise_schema}.{self.enterprise_dataset_name}');"
             print(f'Table exists statement: {exist_stmt}')
-            with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+            with psycopg.connect(self.libpq_conn_string) as conn:
                 with conn.cursor() as cur:
+                    cur.execute(f"SET statement_timeout = {self.timeout}")
                     cur.execute(exist_stmt)
                     table_exists_check = cur.fetchone()[0]
             return table_exists_check
         else:
             exist_stmt = f"SELECT to_regclass('{schema}.{table}');"
             print(f'Table exists statement: {exist_stmt}')
-            with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+            with psycopg.connect(self.libpq_conn_string) as conn:
                 with conn.cursor() as cur:
+                    cur.execute(f"SET statement_timeout = {self.timeout}")
                     cur.execute(exist_stmt)
                     table_exists_check = cur.fetchone()[0]
             return table_exists_check
@@ -91,8 +93,9 @@ class Db2():
             WHERE table_schema = '{self.enterprise_schema}' and table_name = '{self.enterprise_dataset_name}'
         '''
         print('Running col_info_stmt: ' + col_info_stmt)
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(col_info_stmt)
                 # Format and transform data types:
                 column_info = {i[0]: self.data_type_map.get(i[1], i[1]) for i in cur.fetchall()}
@@ -117,8 +120,9 @@ class Db2():
         '''
         # Identify the geometry column values
         print('Running get_column_name_and_srid_stmt' + get_column_name_and_srid_stmt)
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(get_column_name_and_srid_stmt)
                 col_name1 = cur.fetchall()
 
@@ -237,8 +241,9 @@ class Db2():
         #return ddl
 
     def run_ddl(self):
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 drop_stmt = f'DROP TABLE IF EXISTS {self.staging_schema}.{self.enterprise_dataset_name}'
                 # drop first so we have a total refresh
                 print('Running drop stmt: ' + drop_stmt)
@@ -290,8 +295,9 @@ class Db2():
         if lock_type:
             lock_stmt +=  f" AND pg_locks.mode = '{lock_type}'"
         lock_stmt += ';'
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(lock_stmt)
                 locks = cur.fetchall()
                 if locks:
@@ -318,8 +324,9 @@ class Db2():
     def copy_to_enterprise(self):
         ''''Copy from either department table or etl_staging temp table, depending on args passed.'''
         self.get_geom_column_info()
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 prod_table = f'{self.enterprise_schema}.{self.enterprise_dataset_name}'
                 # If etl_staging, that means we got data uploaded from S3 or an ArcPy copy
                 # so use the appropriate name which would be "etl_staging.dept_name__table_name"
@@ -575,8 +582,9 @@ class Db2():
                     cur.execute('COMMIT')
 
         # Note: autocommit takes it out of a transaction.
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}", autocommit=True) as conn:
+        with psycopg.connect(self.libpq_conn_string, autocommit=True) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # Manually run a vacuum on our tables for database performance
                 cur.execute(f'VACUUM VERBOSE {prod_table};')
                 cur.execute('COMMIT')
@@ -745,8 +753,9 @@ class Db2():
             vals=sql.SQL(", ").join(sql.Placeholder() for _ in non_geom_cols),
         )
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 print('Beginning transform/copy..')
                 cur.execute(select_sql)
                 rows = cur.fetchmany(batch)
@@ -766,6 +775,7 @@ class Db2():
                         params.append(tuple(attrs) + (ewkb_out, self.to_srid))
 
                     with conn.cursor() as cur2:
+                        cur2.execute(f"SET statement_timeout = {self.timeout}")
                         cur2.executemany(insert_sql, params)
                     conn.commit()
 
@@ -791,8 +801,9 @@ class Db2():
         # Build the coordinate transformer
         reproj = self.build_reprojector()
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # confirm our source exists
                 assert self.confirm_table_existence()
                 # confirm our destination table exists, if not make it.
@@ -826,8 +837,9 @@ class Db2():
                 # Stream, transform, insert
                 self.copy_rows_transformed(dest_table, reproj)
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # Try to make shape index always
                 if self.geom_info:
                     geom_column = self.geom_info['geom_field']
