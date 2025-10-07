@@ -23,9 +23,6 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
-    "apache-airflow", #to allow to be used by the KubernetesExecutor
-    "asyncpg", # Needed for airflow
-    "statsd", # Needed for airflow
     "setuptools",
     "boto3",
     "botocore",

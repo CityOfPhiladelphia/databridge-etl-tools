@@ -117,5 +117,5 @@ def db2_client(connector_string):
 def test_db2_copy_to_enterprise(db2_client):
     db2_client.copy_to_enterprise()
 
-#def test_db2_copy_to_enterprise(db2_client):
-#    db2_client.reproject_shapes()
+def test_db2_copy_to_enterprise(db2_client):
+    db2_client.reproject_shapes()
