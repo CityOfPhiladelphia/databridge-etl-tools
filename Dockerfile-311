@@ -11,27 +11,25 @@ RUN useradd -ms /bin/bash worker
 
 RUN apt-get update && \
   apt-get install -yqq --no-install-recommends \
-  libpq-dev \
-  apt-utils \
-  build-essential \
-  ca-certificates \
-  curl \
-  git \
-  gnupg \
-  lsb-release \
-  wget \
-  unzip
-
-# Cleanup
-RUN apt-get remove --purge -yqq $buildDeps \
+    libpq-dev \
+    apt-utils \
+    build-essential \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
+    lsb-release \
+    wget \
+    unzip && \
+  apt-get remove --purge -yqq $buildDeps \
   && apt-get clean \
   && rm -rf \
-  /var/lib/apt/lists/* \
-  /tmp/* \
-  /var/tmp/* \
-  /usr/share/man \
-  /usr/share/doc \
-  /usr/share/doc-base
+    /var/lib/apt/lists/* \
+    /tmp/* \
+    /var/tmp/* \
+    /usr/share/man \
+    /usr/share/doc \
+    /usr/share/doc-base
 
 USER worker
 WORKDIR /home/worker/
