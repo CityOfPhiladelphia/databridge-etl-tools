@@ -111,6 +111,8 @@ def db2_client(connector_string):
             libpq_conn_string=connector_string,
             index_fields='datefield,textfield+numericfield',
             to_srid='3857',
+            xshift='-0.20',
+            yshift='+1.18',
     )
     return db2_interact_client
 

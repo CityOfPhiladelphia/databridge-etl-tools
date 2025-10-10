@@ -20,6 +20,8 @@ class Db2():
     def __init__(self,
                 table_name,
                 account_name,
+                xshift,
+                yshift,
                 copy_from_source_schema = None,
                 enterprise_schema = None,
                 libpq_conn_string = None,
@@ -34,6 +36,10 @@ class Db2():
         self.libpq_conn_string = libpq_conn_string
         self.index_fields = index_fields.split(',') if index_fields else None
         self.to_srid = int(to_srid) if to_srid else None
+        # Manual nudge to more closely match ArcGIS's 3857 transformation
+        # (yes I painstakingly lined up to get the default values of -0.20 and +1.18)
+        self.xshift = xshift
+        self.yshift = yshift
         self.staging_schema = 'etl_staging'
         self.timeout = int(timeout) * 60 * 1000 if timeout else 50 * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
         # use this to transform specific to more general data types for staging table
@@ -663,6 +669,15 @@ class Db2():
             3) 4326 -> 3857
         - For 4326 -> 3857: single step.
         """
+        if self.geom_info['srid'] == self.to_srid:
+            raise NotImplementedError("No reprojection needed, source and target SRID are the same. Have not implemented manual nudge yet if thats what you want.")
+            #print('No reprojection needed, source and target SRID are the same. Will only manually nudge!')
+            #t_shift = Transformer.from_pipeline(
+            #    f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
+            #)
+            #def reproj_auto(*args):
+
+
         if self.geom_info['srid'] == 2272 and self.to_srid == 3857:
             t1 = Transformer.from_crs("EPSG:2272", "EPSG:4269", always_xy=True)    # ftUS -> deg
             # NOTE: 1950 is NAD83->NAD83(CSRS)(4). If you want ArcGIS “_5”, use EPSG:1515 instead.
@@ -670,12 +685,9 @@ class Db2():
             # t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1515")
             t3 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)    # deg -> m
 
-            # Manual nudge to more closely match ArcGIS's 3857 transformation
-            # (yes I painstakingly lined this up)
-            DX_M = -0.20 # west by 20 cm
-            DY_M = +1.18  # north by 118 cm
+            # Manual nudge in cm to align with arcgis projections
             t_shift = Transformer.from_pipeline(
-                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={DX_M} +yoff={DY_M}"
+                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
             )
 
             def reproj_vec(xyz: np.ndarray) -> np.ndarray:
