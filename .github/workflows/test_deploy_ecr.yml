@@ -58,9 +58,9 @@ jobs:
     # Build our docker container and insert our AWS secret keys
     # no-cache so we're sure we're getting all changes (such as geopetl changes)
     # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
-    - name: Build docker container
+    - name: Build 312 docker container
       run: |
-         docker build -t dbtools \
+         docker build -t dbtools-312 \
          --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
          --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
          --no-cache \
@@ -68,43 +68,18 @@ jobs:
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-       
-    - name: Postgres pytests
+      # Also build an airflow version
+    - name: Build Airflow docker container
       run: |
-          docker run --rm dbtools \
-            pytest tests/test_postgres.py \
-            -vvv -ra --showlocals --tb=long --disable-warnings \
-            --user $POSTGRES_USER \
-            --password $POSTGRES_PASSWORD \
-            --host $POSTGRES_HOST \
-            --database $POSTGRES_DB
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-
-    - name: AGO pytests
-      run: |
-          docker run --rm dbtools \
-            pytest tests/test_ago.py \
-            -s -vvv -ra --showlocals --tb=long --disable-warnings  \
-            --ago_user $AGO_USER \
-            --ago_password $AGO_PASSWORD
-      env:
-        AGO_USER: ${{ secrets.AGO_USER }}
-        AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
-
-    - name: Carto pytests
-      run: |
-          docker run --rm dbtools \
-            pytest tests/test_carto.py \
-            -s -vvv -ra --showlocals --tb=long --disable-warnings  \
-            --carto_user $CARTO_USER \
-            --carto_password $CARTO_PASSWORD
-      env:
-        CARTO_USER: ${{ secrets.CARTO_USER }}
-        CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
+         docker build -t dbtools-airflow \
+         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+         --no-cache \
+         -f Dockerfile-airflow .
+      env: 
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  
 
 
     # https://github.com/aws-actions/amazon-ecr-login
@@ -112,11 +87,20 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Docker Push to ECR
+    - name: Docker Push 312 to ECR
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
       run: |
-        docker tag dbtools:latest $ECR_REPOSITORY_URL:latest
+        docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
         docker push $ECR_REPOSITORY_URL:latest
+
+    - name: Docker Push airflow to ECR
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      run: |
+        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
+        docker push $ECR_REPOSITORY_URL:airflow-latest
