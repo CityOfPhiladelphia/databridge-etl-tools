@@ -25,6 +25,7 @@ def postgres(ctx, **kwargs):
 
 @postgres.command()
 @click.pass_context
+@click.option('--exclude_fields', required=False, help='Comma-separated list of fields to exclude from the extraction.')
 @click.option('--with_srid', default=True, required=False, show_default=True, 
         help='''Likely only needed for certain views. This
         controls whether the geopetl frompostgis() function exports with geom_with_srid. That wont work
