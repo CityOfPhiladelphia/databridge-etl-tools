@@ -46,6 +46,7 @@ class Postgres():
         self.geom_field = kwargs.get('geom_field', None)
         self.geom_type = kwargs.get('geom_type', None)
         self.with_srid = kwargs.get('with_srid', None)
+        self.exclude_fields = kwargs.get('exclude_fields', None)
         self._json_schema_s3_key = kwargs.get('json_schema_s3_key', None)
         self._schema = None
         self._export_json_schema = None
@@ -458,6 +459,11 @@ class Postgres():
             rows_new = etl.convert(rows, timestamp_fields, pytz.timezone('US/Eastern').localize)
             # Replace rows with our converted object
             rows = rows_new
+
+        if self.exclude_fields:
+            exclude_fields_list = [f.strip() for f in self.exclude_fields.split(',')]
+            self.logger.info(f'Excluding fields from extraction: {exclude_fields_list}\n')
+            rows = rows.cutout(*exclude_fields_list)
 
         self.logger.info(f'Asserting counts match between db and extracted csv')
         self.logger.info(f'{row_count} == {num_rows_in_csv}')
