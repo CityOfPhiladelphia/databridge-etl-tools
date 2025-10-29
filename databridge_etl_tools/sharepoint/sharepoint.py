@@ -14,14 +14,20 @@ import httpx
 
 class Sharepoint():
     """Extracts a CSV from a .csv or .xlsx file in Sharepoint."""
+    # if the file is .xlsx, a sheet_name must be provided to extract that sheet as csv.
+    # If s3_bucket and s3_key are provided, the extracted csv will be loaded to that S3 location.
+    # If not, the csv will be saved to local csv_path.
+    # GraphAPI credentials must be provided to access Sharepoint.
+    # The GraphAPI application must have appropriate permissions to access Sharepoint site.
     def __init__(self, 
                  graphapi_tenant_id,
                  graphapi_application_id,
                  graphapi_secret_value,
                  site_name,
                  file_path,
-                 s3_bucket,
-                 s3_key,
+                 s3_bucket=None,
+                 s3_key=None,
+                 csv_path='/tmp/output.csv',
                  **kwargs):
         self.debug = kwargs.get('debug', False)
 
@@ -45,7 +51,7 @@ class Sharepoint():
         self.sheet_name = kwargs.get('sheet_name', None)
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        self.csv_path = '/tmp/output.csv'
+        self.csv_path = csv_path
     
     def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
@@ -94,7 +100,7 @@ class Sharepoint():
         content = await self.get_raw_bytes(file_content_url)
         return content 
 
-    def write_to_temp(self, content):
+    def write_to_csv(self, content):
         # TODO: make sure headers are handled properly
         if self.file_extension == "csv":
             with open(self.csv_path, "wb") as f:
@@ -129,10 +135,11 @@ class Sharepoint():
         content = asyncio.run(self.get_sharepoint_content())
         if self.debug:
             print(f"File content of {self.file_path} obtained")
-        self.write_to_temp(content)
+        self.write_to_csv(content)
         if self.debug:
             print(f"Content written to temporary csv")
-        self.load_to_s3()
+        if self.s3_bucket and self.s3_key:
+            self.load_to_s3()
         if self.debug:
             print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
             print("Extraction complete!")
