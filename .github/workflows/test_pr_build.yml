@@ -77,7 +77,7 @@ jobs:
           docker run --rm dbtools \
           pytest tests/test_postgres.py \
           -vvv -ra --showlocals --tb=long --disable-warnings \
-            --user citygeo \
+            --user $POSTGRES_USER \
             --password $POSTGRES_PASSWORD \
             --host $POSTGRES_HOST \
             --database $POSTGRES_DB
