@@ -461,15 +461,16 @@ class Postgres():
             rows = rows_new
 
         if self.exclude_fields:
-            exclude_fields_list = [f.strip() for f in self.exclude_fields.split(',')]
-            self.logger.info(f'Excluding fields from extraction: {exclude_fields_list}\n')
-            rows = rows.cutout(*exclude_fields_list)
+            self.logger.info(f'Excluding fields from extraction: {self.exclude_fields}\n')
+            for f in self.exclude_fields.split(','):
+                if f.strip() in rows.header():
+                    rows = rows.cutout(f.strip())
 
         self.logger.info(f'Asserting counts match between db and extracted csv')
         self.logger.info(f'{row_count} == {num_rows_in_csv}')
         assert row_count == num_rows_in_csv
         
-        if return_data: 
+        if return_data:
             return rows
         
         # Dump to our CSV temp file
