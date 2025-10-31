@@ -69,6 +69,7 @@ class AGO():
         self.export_format = kwargs.get('export_format', None)
         self.export_zipped = kwargs.get('export_zipped', False)
         self.batch_size = kwargs.get('batch_size', 500)
+        self.exclude_fields = kwargs.get('exclude_fields', None)
         self.export_dir_path = kwargs.get('export_dir_path', os.getcwd() + '\\' + self.ago_item_name.replace(' ', '_'))
         # Try to use /tmp dir, it should exist. Else, use our current user's home dir
         if not os.path.isdir('/tmp'):
@@ -492,16 +493,28 @@ class AGO():
         except UnicodeError:
             print("Exception encountered trying to import rows wtih utf-8 encoding, trying latin-1...")
             rows = etl.fromcsv(self.csv_path, encoding='latin-1')
+
+        if self.exclude_fields:
+            print(f'Excluding fields from upload: {self.exclude_fields}\n')
+            for f in self.exclude_fields.split(','):
+                if f.strip() in rows.fieldnames():
+                    rows = rows.cutout(f.strip())
+
+
         # Compare headers in the csv file vs the fields in the ago item.
         # If the names don't match and we were to upload to AGO anyway, AGO will not actually do 
         # anything with our rows but won't tell us anything is wrong!
-        print(f'Comparing AGO fields: {set(self.fields.keys())} ')
+        if self.exclude_fields:
+            ago_fields_comp = set(self.fields.keys()) - set([f.strip() for f in self.exclude_fields.split(',')])
+        else:
+            ago_fields_comp = set(self.fields.keys())
+        print(f'Comparing AGO fields: {ago_fields_comp} ')
         print(f'To CSV fields: {set(rows.fieldnames())} ')
 
         # Apparently we need to compare both ways even though we're sorting them into sets
         # Otherwise we'll miss out on differences.
-        row_differences1 = set(self.fields.keys()) - set(rows.fieldnames())
-        row_differences2 = set(rows.fieldnames()) - set(self.fields.keys())
+        row_differences1 = ago_fields_comp - set(rows.fieldnames())
+        row_differences2 = set(rows.fieldnames()) - ago_fields_comp
         
         # combine both difference subtractions with a union
         row_differences = row_differences1.union(row_differences2)

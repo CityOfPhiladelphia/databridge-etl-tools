@@ -23,6 +23,8 @@ def ago(ctx, **kwargs):
             help='Column, or comma separated list of column names to clean of AGO invalid characters.')
 @click.option('--batch_size', type=click.INT, default=500, required=False,
             help='Size of batch updates to send to AGO')
+@click.option('--exclude_fields', type=click.STRING, default=False, required=False,
+            help='Comma separated list of column names to exclude from the update.')
 def append_group(ctx, **kwargs): 
     '''Use this group for any commands that utilize append'''
     ctx = utils.pass_params_to_ctx(ctx, **kwargs)

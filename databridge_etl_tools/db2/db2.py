@@ -193,13 +193,13 @@ class Db2():
                 else:
                     xml_def = result[0]
 
-                    m = re.search("<HasM>\D*<\/HasM>", xml_def)[0]
+                    m = re.search(r"<HasM>\D*<\/HasM>", xml_def)[0]
                     if 'false' in m:
                         self.m = False
                     elif 'true' in m:
                         self.m = True
 
-                    z = re.search("<HasZ>\D*<\/HasZ>", xml_def)[0]
+                    z = re.search(r"<HasZ>\D*<\/HasZ>", xml_def)[0]
                     if 'false' in z:
                         self.z = False
                     elif 'true' in z:
