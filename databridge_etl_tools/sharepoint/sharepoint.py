@@ -25,9 +25,9 @@ class Sharepoint():
                  graphapi_secret_value,
                  site_name,
                  file_path,
-                 s3_bucket=None,
-                 s3_key=None,
-                 csv_path='/tmp/output.csv',
+                 csv_path,
+                 s3_bucket,
+                 s3_key,
                  **kwargs):
         self.debug = kwargs.get('debug', False)
 
@@ -51,7 +51,7 @@ class Sharepoint():
         self.sheet_name = kwargs.get('sheet_name', None)
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        self.csv_path = csv_path
+        self.csv_path = csv_path or '/tmp/output.csv'
     
     def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
