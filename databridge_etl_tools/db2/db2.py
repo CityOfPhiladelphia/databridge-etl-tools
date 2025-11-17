@@ -20,8 +20,8 @@ class Db2():
     def __init__(self,
                 table_name,
                 account_name,
-                xshift,
-                yshift,
+                xshift = None,
+                yshift = None,
                 copy_from_source_schema = None,
                 enterprise_schema = None,
                 libpq_conn_string = None,
@@ -38,8 +38,8 @@ class Db2():
         self.to_srid = int(to_srid) if to_srid else None
         # Manual nudge to more closely match ArcGIS's 3857 transformation
         # (yes I painstakingly lined up to get the default values of -0.20 and +1.18)
-        self.xshift = xshift
-        self.yshift = yshift
+        self.xshift = xshift if xshift else None
+        self.yshift = yshift if yshift else None
         self.staging_schema = 'etl_staging'
         self.timeout = int(timeout) * 60 * 1000 if timeout else 50 * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
         # use this to transform specific to more general data types for staging table
