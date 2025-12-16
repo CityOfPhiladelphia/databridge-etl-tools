@@ -3,6 +3,8 @@ import psycopg2.sql as sql
 import geopetl
 import pytz
 import petl as etl
+import boto3
+import json
 from .postgres_connector import Postgres_Connector
 from ..utils import force_2d
 
@@ -56,18 +58,6 @@ class Postgres():
         self._database_object_type = None
         self._registration_id = None
 
-        # First make sure the table exists: 
-        if self.table_schema == None: # If no schema provided, assume the table is TEMPORARY
-            assert_statement = f'TEMPORARY Table {self.table_name} does not exist in this DB'
-            logger_statement = f'TEMPORARY table {self.table_name}'
-        else: 
-            assert_statement = f'Table {self.table_schema}.{self.table_name} does not exist in this DB'
-            logger_statement = f'table {self.fully_qualified_table_name}'
-        
-        if table_name != None: # If no table name was provided, don't bother with checking
-            assert self.check_exists(self.table_name, self.table_schema), assert_statement
-            self.logger.info(f'Connected to {logger_statement}\n')
-
     def __enter__(self):
         '''Context manager functions to be called BEFORE any functions inside
         ```
@@ -77,7 +67,6 @@ class Postgres():
         See https://book.pythontips.com/en/latest/context_managers.html
         '''
         
-        self.get_row_count()
         self.logger.info(f'{"*" * 80}\n')
         return self
     
@@ -147,6 +136,33 @@ class Postgres():
     def create_indexes(self, table_name):
         raise NotImplementedError
 
+    def get_json_schema_from_s3(self):
+        self.logger.info('Fetching json schema: s3://{}/{}'.format(self.s3_bucket, self.json_schema_s3_key))
+
+        s3 = boto3.resource('s3')
+        try:
+            s3.Object(self.s3_bucket, self.json_schema_s3_key).download_file(self.json_schema_path)
+        except Exception as e:
+            if 'HeadObject operation: Not Found' in str(e):
+                msg = f'Json schema file does not exist in S3! Please use databridge-etl-tools "extract-json-schema" command and place the file here: s3:/{self.s3_bucket}/{self.json_schema_s3_key}'
+                msg += '\n Command form would be: databridge_etl_tools postgres --table_name={table_name} --table_schema={table_schema} --connection_string=postgresql://postgres:{password}@{host}:5432/databridge --s3_bucket={s3_bucket} --s3_key=staging/{table_shema}/{table_name} extract-json-schema'
+                raise AssertionError(msg)
+            else:
+                raise e
+
+        self.logger.info('Json schema successfully downloaded.\n'.format(self.s3_bucket, self.json_schema_s3_key))
+
+    def schema_from_s3(self):
+        if self._schema is None:
+            self.get_json_schema_from_s3()
+
+            with open(self.json_schema_path) as json_file:
+                schema = json.load(json_file).get('fields', '')
+                if not schema:
+                    self.logger.error('Json schema malformatted...')
+                self._schema = schema
+        return self._schema
+
     def get_csv(self):
         '''
         Simple wrapper method for retrieving csv locally or from s3
@@ -154,7 +170,7 @@ class Postgres():
         if not self.local_csv_path:
             self.get_csv_from_s3()
 
-    def prepare_file(self, file:str, mapping_dict:dict=None, force2d=True):
+    def prepare_file(self, file:str, mapping_dict:dict=None, force2d=True, create_table:bool=False):
         '''
         Prepare a CSV file's geometry and header for insertion into Postgres; 
         write to CSV at self.temp_csv_path. If mapping_dict is not None, no edits 
@@ -228,14 +244,71 @@ class Postgres():
                 self.logger.info(f'\nDetected {old_col} primary key, implementing workaround and modifying header...\n')
                 str_header = str_header.replace(f'{old_col}', 'objectid')
             rows = rows.rename({old:new for old, new in zip(header, str_header.split(', '))})
-        
+
+        # Attempt to create a (non-registered table) if it doesn't exist
+        if create_table:
+            with self.conn.cursor() as cursor:
+                if not self.check_exists(self.table_name, self.table_schema):
+                    # pull in schema to create table
+                    schema  = self.schema_from_s3()
+                    # Create our table creation statement from the downloaded schema.
+                    create_ddl = f'CREATE TABLE {self.fully_qualified_table_name} ('
+
+                    # First assert the CSV header matches the schema fields. Sometimes "objectid" is excluded.
+                    csv_header_set = set([h.strip().lower() for h in str_header.split(',')])
+                    schema_field_set = set([s['name'].strip().lower() for s in schema])
+                    diff = schema_field_set - csv_header_set
+                    diff2 = csv_header_set - schema_field_set
+                    diff_join = diff.union(diff2)
+                    if diff_join and diff_join != set({'objectid', 'gdb_geomattr_data'}):
+                        raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
+
+                    # If objectid is missing from JSON schema but present in CSV header, add it
+                    if 'objectid' in diff_join and 'objectid' not in schema_field_set:
+                        schema.insert(0, {'name': 'objectid', 'type': 'numeric'})
+                        pass
+
+                    print(schema)
+
+                    # Gather columns and types from json schema
+                    for i, scheme in enumerate(schema):
+                        col = ''
+                        if scheme['name'].lower() == 'gdb_geomattr_data':
+                            continue # Skip this esri-specific field
+                        elif scheme['type'] == 'geometry':
+                            col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
+                        else:
+                            col = f'{scheme["name"]} {scheme["type"]}'
+
+                        if 'constraints' in scheme.keys():
+                            if 'required' in scheme['constraints'].keys() and scheme['constraints']['required'] == True:
+                                col += ' NOT NULL'
+                            else:
+                                col += ' NULL'
+                        if col:
+                            create_ddl += col
+                            if i < len(schema) - 2:
+                                create_ddl += ', '
+                    create_ddl += ')'
+                    self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
+                    cursor.execute(create_ddl)
+                    cursor.execute(f'COMMIT;')
+
         # Write our possibly modified lines into the temp_csv file
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
 
+
     def _is_registered(self) -> bool:
         """Check if the table is registered. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
         with self.conn.cursor() as cursor:
+                    # To start, check if we're in an SDE-enabled database at all.
+            stmt = "SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'sde' AND tablename  = 'sde_table_registry');"
+            cursor.execute(stmt)
+            sde_enabled = cursor.fetchone()[0]
+            if not sde_enabled:
+                print('SDE is not enabled in this database, table cant be registered..')
+                return False
             stmt1 = f"select registration_id FROM sde.sde_table_registry where table_name = '{self.table_name}' and schema = '{self.table_schema}';"
             stmt2 = f"select objectid FROM sde.gdb_items where lower(name) = 'databridge.{self.table_schema}.{self.table_name}';"
             cursor.execute(stmt1)
@@ -550,7 +623,7 @@ class Postgres():
             cursor.execute(truncate_stmt)
             self.logger.info(f'Truncate successful: {cursor.rowcount:,} rows updated/inserted.\n')
 
-    def load(self, column_mappings:str=None, mappings_file:str=None, truncate_before_load:bool=False):
+    def load(self, column_mappings:str=None, mappings_file:str=None, truncate_before_load:bool=False, create_table:bool=False):
         '''
         Prepare and COPY a CSV from S3 to a Postgres table. If the keyword arguments 
         "column_mappings" or "mappings_file" are passed with values other than None, 
@@ -571,9 +644,13 @@ class Postgres():
         only the columns whose headers differ between the data file and the database 
         table need to be included. All column names must be quoted. 
         '''
+        # Check table existence
+        if not create_table:
+            assert self.check_exists(self.table_name, self.table_schema), f'Error! Table {self.fully_qualified_table_name} does not exist in database.'
+
         mapping_dict = self._make_mapping_dict(column_mappings, mappings_file)
         self.get_csv()
-        self.prepare_file(file=self.csv_path, mapping_dict=mapping_dict)
+        self.prepare_file(file=self.csv_path, mapping_dict=mapping_dict, create_table=create_table)
         if truncate_before_load:
             self.delete_from_truncate()
         self.write_csv(write_file=self.temp_csv_path, table_name=self.table_name, 

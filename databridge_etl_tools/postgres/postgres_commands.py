@@ -55,6 +55,7 @@ def extract_json_schema(ctx):
     {"data_col": "db_table_col", "data_col2": "db_table_col2", ... }. Note no quotes 
     around the curly braces `{}`.
 ''')
+@click.option('--create_table', is_flag=True, required=False, help='Optionally try to create the table before loading.')
 def load(ctx, **kwargs):
     """
     Prepare and COPY a CSV from S3 to a Postgres table. The keyword arguments 
