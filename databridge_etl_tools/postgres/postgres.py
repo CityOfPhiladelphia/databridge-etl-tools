@@ -40,11 +40,15 @@ class Postgres():
         self.conn = self.connector.conn
         self.table_name = table_name
         self.table_schema = table_schema
-        self.local_csv_path = kwargs.get('local_csv_path', None)
         self.fully_qualified_table_name = f'{self.table_schema}.{self.table_name}'
         self.temp_table_name = self.table_name + '_t'
         self.s3_bucket = kwargs.get('s3_bucket', None)
         self.s3_key = kwargs.get('s3_key', None)
+        self.local_csv_path = (
+            kwargs.get("local_csv_path")
+            if self.s3_key is None and self.s3_bucket is None 
+            else None
+        )
         self.geom_field = kwargs.get('geom_field', None)
         self.geom_type = kwargs.get('geom_type', None)
         self.with_srid = kwargs.get('with_srid', None)
