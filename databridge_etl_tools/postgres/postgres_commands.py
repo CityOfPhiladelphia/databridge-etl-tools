@@ -13,7 +13,7 @@ import click
 @click.option('--table_schema', required=True)
 @click.option('--s3_bucket', required=False)
 @click.option('--s3_key', required=False)
-@click.option('--local_csv_path', required=False)
+@click.option('--local_csv_path', default='/tmp/output.csv', required=False)
 def postgres(ctx, **kwargs):
     '''Run ETL commands for Postgres'''
     ctx.obj = {}
