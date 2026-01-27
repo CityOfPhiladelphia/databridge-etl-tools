@@ -53,6 +53,12 @@ class Postgres():
         self.geom_type = kwargs.get('geom_type', None)
         self.with_srid = kwargs.get('with_srid', None)
         self.exclude_fields = kwargs.get('exclude_fields', None)
+        self.index_fields = (
+            kwargs.get('index_fields', None)
+            if kwargs.get('index_fields', None) is None or kwargs.get('index_fields', None).strip() == ''
+            else [i.strip() for i in kwargs.get('index_fields').split(',')]
+        )
+
         self._json_schema_s3_key = kwargs.get('json_schema_s3_key', None)
         self._schema = None
         self._export_json_schema = None
@@ -137,8 +143,41 @@ class Postgres():
                 result = cursor.fetchall()
                 return result
 
-    def create_indexes(self, table_name):
-        raise NotImplementedError
+    def create_indexes(self):
+        print("\nInstalling indexes, we will NOT fail if we can't make them so table doesn't overwrite several times.")
+        with self.conn.cursor() as cursor:
+            try:
+                for i in self.index_fields:
+                    # if compound index
+                    if '+' in i:
+                        split_indexes = i.split('+')
+                        # compile the indexes into a comma separated string because we don't know how many could be in the compound.
+                        cols = ', '.join(split_indexes)
+                        idx_name = '_'.join(split_indexes) + '_idx'
+                        index_stmt = f'CREATE INDEX IF NOT EXISTS {idx_name}_idx ON {self.fully_qualified_table_name} USING btree ({cols});'
+                    # If single index
+                    else:
+                        index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {self.fully_qualified_table_name} USING btree ({i});'
+                    print('Running index_stmt: ' + str(index_stmt))
+                    cursor.execute(index_stmt)
+                    cursor.execute('COMMIT;')
+            except Exception as e:
+                print(f'Error creating shape index: {str(e)}')
+                cursor.execute('ROLLBACK;')
+        
+            # Try to make shape index always
+            if self.geom_field:
+                try:
+                    geom_column = self.geom_field
+                    shape_index_stmt = f'CREATE INDEX IF NOT EXISTS {self.geom_field}_gist ON {self.fully_qualified_table_name} USING GIST ({self.geom_field});'
+                    print('\nRunning shape_index_stmt: ' + str(shape_index_stmt))
+                    cursor.execute(shape_index_stmt)
+                    cursor.execute('COMMIT;')
+                except Exception as e:
+                    print(f'Error creating shape index: {str(e)}')
+                    cursor.execute('ROLLBACK;')
+        print('\nSuccess!')
+
 
     def get_json_schema_from_s3(self):
         self.logger.info('Fetching json schema: s3://{}/{}'.format(self.s3_bucket, self.json_schema_s3_key))
@@ -264,7 +303,7 @@ class Postgres():
                     diff = schema_field_set - csv_header_set
                     diff2 = csv_header_set - schema_field_set
                     diff_join = diff.union(diff2)
-                    if diff_join and diff_join != set({'objectid', 'gdb_geomattr_data'}):
+                    if diff_join and (diff_join != set({'objectid', 'gdb_geomattr_data'}) and diff_join != set({'gdb_geomattr_data'})):
                         raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
 
                     # If objectid is missing from JSON schema but present in CSV header, add it
@@ -277,9 +316,10 @@ class Postgres():
                     # Gather columns and types from json schema
                     for i, scheme in enumerate(schema):
                         col = ''
-                        if scheme['name'].lower() == 'gdb_geomattr_data':
-                            continue # Skip this esri-specific field
-                        elif scheme['type'] == 'geometry':
+                        # for new carto platform which is just postgres, translate datetime to timestamp.
+                        if scheme["type"] == 'datetime':
+                            scheme["type"] = 'timestamp without time zone'
+                        if scheme['type'] == 'geometry':
                             col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
                         else:
                             col = f'{scheme["name"]} {scheme["type"]}'
@@ -291,8 +331,9 @@ class Postgres():
                                 col += ' NULL'
                         if col:
                             create_ddl += col
-                            if i < len(schema) - 2:
-                                create_ddl += ', '
+                            create_ddl += ', '
+                    # Remove last comma/space
+                    create_ddl = create_ddl[:-2]
                     create_ddl += ')'
                     self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
                     cursor.execute(create_ddl)
@@ -659,6 +700,8 @@ class Postgres():
             self.delete_from_truncate()
         self.write_csv(write_file=self.temp_csv_path, table_name=self.table_name, 
                        schema_name=self.table_schema, mapping_dict=mapping_dict)
+
+        self.create_indexes()
 
     def _delete_using_except(self, staging, mapping_dict:dict): 
         '''Run a query to delete the rows from a table that do not appear in another 
