@@ -29,8 +29,8 @@ RUN apt-get update && \
 
 USER airflow
 
-COPY pyproject.toml ./pyproject.toml
-COPY databridge_etl_tools ./databridge_etl_tools
+COPY --chown=airflow:airflow pyproject.toml ./pyproject.toml
+COPY --chown=airflow:airflow databridge_etl_tools ./databridge_etl_tools
 
 # Python syntax check
 RUN python -m compileall ./databridge_etl_tools
