@@ -588,7 +588,7 @@ class Postgres():
         self.logger.info(f'{row_count} == {num_rows_in_csv}')
         assert row_count == num_rows_in_csv
         
-        if return_data: 
+        if return_data:
             return rows
         
         # Dump to our CSV temp file

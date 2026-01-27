@@ -79,8 +79,22 @@ jobs:
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        
+    - name: Postgres pytests
+      run: |
+          docker run --rm dbtools-312 \
+            pytest tests/test_postgres.py \
+            -vvv -ra --showlocals --tb=long --disable-warnings \
+            --user $POSTGRES_USER \
+            --password $POSTGRES_PASSWORD \
+            --host $POSTGRES_HOST \
+            --database $POSTGRES_DB
+      env:
+        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
   
-
 
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Login to Amazon ECR
