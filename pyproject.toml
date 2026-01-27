@@ -39,6 +39,7 @@ dependencies = [
     "pyrestcli",
     "python-dateutil",
     "pyproj",
+    "pytz",
     "requests",
     "s3transfer",
     "six",
