@@ -1,4 +1,4 @@
-name: Build and test docker image only for PRs
+name: Build, test, and deploy docker image to Test ECR (PR)
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         dockerfile_prefix: [311,312,313,airflow]
-    name: Build and test
+    name: Build, test, push 312 to Test ECR
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: self-hosted
 
@@ -24,23 +24,8 @@ jobs:
     # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
     # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
     - uses: actions/checkout@v3
-
-  # https://github.com/marketplace/actions/microsoft-teams-deploy-card
-  # Using replacement fork for toko-bifrost, context for why: https://github.com/toko-bifrost/ms-teams-deploy-card/issues/33#issuecomment-888466503 
-    #- uses: toko-bifrost/ms-teams-deploy-card@master
-    # Note: deprecated because of nodejs 12 and seemingly un-updated.
-    # commenting out for now.
-    #- uses: patrickpaulin/ms-teams-deploy-card@master
-    #  if: always()
-    #  with:
-    #    GITHUB-TOKEN: ${{ github.token }}
-    #    WEBHOOK-URI: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-    #    card-layout-start: compact
-    #    show-on-start: true
-    #    show-on-exit: true
-    #    custom-facts: |
-    #      - name: Job Progress
-    #        value: Building databridge-etl-tools
+      with:
+        ref: master
     
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Configure AWS credentials
@@ -143,7 +128,7 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Docker Push 312 to ECR
+    - name: Docker Push 312 to ECR test (databridge-etl-tools-v2-testing)
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -153,5 +138,5 @@ jobs:
           docker tag dbtools-312:latest $ECR_TEST_REPOSITORY_URL:latest
           docker push $ECR_TEST_REPOSITORY_URL:latest
         else
-          echo "Only pushing 312 to ECR for Airflow."
+          echo "This step only for pushing 312 to ECR for Airflow."
         fi

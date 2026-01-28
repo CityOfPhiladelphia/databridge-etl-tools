@@ -1,4 +1,4 @@
-name: Build, test, and deploy docker image to ECR
+name: Build, test, and deploy docker image to Prod ECR (master commit)
 
 on:
   push:
@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and deploy docker container
+    name: Build, test, push 312 to Prod ECR
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: self-hosted
 
@@ -24,24 +24,6 @@ jobs:
       with:
         ref: master
 
-  # https://github.com/marketplace/actions/microsoft-teams-deploy-card
-  # Using replacement fork for toko-bifrost, context for why: https://github.com/toko-bifrost/ms-teams-deploy-card/issues/33#issuecomment-888466503 
-    #- uses: toko-bifrost/ms-teams-deploy-card@master
-    # Note: deprecated because of nodejs 12 and seemingly un-updated.
-    # commenting out for now.
-    #- uses: patrickpaulin/ms-teams-deploy-card@master
-    #  if: always()
-    #  with:
-    #    GITHUB-TOKEN: ${{ github.token }}
-    #    WEBHOOK-URI: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-    #    card-layout-start: compact
-    #    show-on-start: true
-    #    show-on-exit: true
-    #    custom-facts: |
-    #      - name: Job Progress
-    #        value: Building databridge-etl-tools
-
-    
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@main
@@ -81,29 +63,34 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         
     # Have to do a special entrypoint for the airflow image.
-    - name: Postgres pytests
+    - name: Airflow postgres pytests
       run: |
-        if [ "${{ matrix.dockerfile_prefix }}" == "airflow" ]; then
           docker run --entrypoint python --rm \
             -e DB_USER=$POSTGRES_USER \
             -e DB_HOST=$POSTGRES_HOST \
             -e DB_PASSWORD=$POSTGRES_PASSWORD \
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
-            dbtools \
+            dbtools-airflow \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
-        else
+      env:
+        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+
+    - name: Python 312 postgres pytests
+      run: |
           docker run --rm \
             -e DB_USER=$POSTGRES_USER \
             -e DB_HOST=$POSTGRES_HOST \
             -e DB_PASSWORD=$POSTGRES_PASSWORD \
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
-            dbtools \
+            dbtools-312 \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
-        fi
       env:
         POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
         POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
@@ -116,7 +103,7 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Docker Push 312 to ECR
+    - name: Docker Push 312 to ProdECR
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -125,7 +112,7 @@ jobs:
         docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
         docker push $ECR_REPOSITORY_URL:latest
 
-    - name: Docker Push airflow to ECR
+    - name: Docker Push airflow to Prod ECR
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
