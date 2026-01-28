@@ -147,20 +147,23 @@ class Postgres():
         print("\nInstalling indexes, we will NOT fail if we can't make them so table doesn't overwrite several times.")
         with self.conn.cursor() as cursor:
             try:
-                for i in self.index_fields:
-                    # if compound index
-                    if '+' in i:
-                        split_indexes = i.split('+')
-                        # compile the indexes into a comma separated string because we don't know how many could be in the compound.
-                        cols = ', '.join(split_indexes)
-                        idx_name = '_'.join(split_indexes) + '_idx'
-                        index_stmt = f'CREATE INDEX IF NOT EXISTS {idx_name}_idx ON {self.fully_qualified_table_name} USING btree ({cols});'
-                    # If single index
-                    else:
-                        index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {self.fully_qualified_table_name} USING btree ({i});'
-                    print('Running index_stmt: ' + str(index_stmt))
-                    cursor.execute(index_stmt)
-                    cursor.execute('COMMIT;')
+                if not self.index_fields:
+                    print('No index fields passed, skipping...')
+                else:
+                    for i in self.index_fields:
+                        # if compound index
+                        if '+' in i:
+                            split_indexes = i.split('+')
+                            # compile the indexes into a comma separated string because we don't know how many could be in the compound.
+                            cols = ', '.join(split_indexes)
+                            idx_name = '_'.join(split_indexes) + '_idx'
+                            index_stmt = f'CREATE INDEX IF NOT EXISTS {idx_name}_idx ON {self.fully_qualified_table_name} USING btree ({cols});'
+                        # If single index
+                        else:
+                            index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {self.fully_qualified_table_name} USING btree ({i});'
+                        print('Running index_stmt: ' + str(index_stmt))
+                        cursor.execute(index_stmt)
+                        cursor.execute('COMMIT;')
             except Exception as e:
                 print(f'Error creating shape index: {str(e)}')
                 cursor.execute('ROLLBACK;')
@@ -168,6 +171,7 @@ class Postgres():
             # Try to make shape index always
             if self.geom_field:
                 try:
+                    print('Always attempting to install shape index...')
                     geom_column = self.geom_field
                     shape_index_stmt = f'CREATE INDEX IF NOT EXISTS {self.geom_field}_gist ON {self.fully_qualified_table_name} USING GIST ({self.geom_field});'
                     print('\nRunning shape_index_stmt: ' + str(shape_index_stmt))
@@ -288,60 +292,76 @@ class Postgres():
                 str_header = str_header.replace(f'{old_col}', 'objectid')
             rows = rows.rename({old:new for old, new in zip(header, str_header.split(', '))})
 
-        # Attempt to create a (non-registered table) if it doesn't exist
-        if create_table:
-            with self.conn.cursor() as cursor:
-                if not self.check_exists(self.table_name, self.table_schema):
-                    # pull in schema to create table
-                    schema  = self.schema_from_s3()
-                    # Create our table creation statement from the downloaded schema.
-                    create_ddl = f'CREATE TABLE {self.fully_qualified_table_name} ('
-
-                    # First assert the CSV header matches the schema fields. Sometimes "objectid" is excluded.
-                    csv_header_set = set([h.strip().lower() for h in str_header.split(',')])
-                    schema_field_set = set([s['name'].strip().lower() for s in schema])
-                    diff = schema_field_set - csv_header_set
-                    diff2 = csv_header_set - schema_field_set
-                    diff_join = diff.union(diff2)
-                    if diff_join and (diff_join != set({'objectid', 'gdb_geomattr_data'}) and diff_join != set({'gdb_geomattr_data'})):
-                        raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
-
-                    # If objectid is missing from JSON schema but present in CSV header, add it
-                    if 'objectid' in diff_join and 'objectid' not in schema_field_set:
-                        schema.insert(0, {'name': 'objectid', 'type': 'numeric'})
-                        pass
-
-                    print(schema)
-
-                    # Gather columns and types from json schema
-                    for i, scheme in enumerate(schema):
-                        col = ''
-                        # for new carto platform which is just postgres, translate datetime to timestamp.
-                        if scheme["type"] == 'datetime':
-                            scheme["type"] = 'timestamp without time zone'
-                        if scheme['type'] == 'geometry':
-                            col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
-                        else:
-                            col = f'{scheme["name"]} {scheme["type"]}'
-
-                        if 'constraints' in scheme.keys():
-                            if 'required' in scheme['constraints'].keys() and scheme['constraints']['required'] == True:
-                                col += ' NOT NULL'
-                            else:
-                                col += ' NULL'
-                        if col:
-                            create_ddl += col
-                            create_ddl += ', '
-                    # Remove last comma/space
-                    create_ddl = create_ddl[:-2]
-                    create_ddl += ')'
-                    self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
-                    cursor.execute(create_ddl)
-                    cursor.execute(f'COMMIT;')
-
         # Write our possibly modified lines into the temp_csv file
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
+
+    def create_table(self, file:str):
+        with self.conn.cursor() as cursor:
+            if not self.check_exists(self.table_name, self.table_schema):
+                # First pull in only the header from the CSV to get column names
+                try:
+                    rows = etl.fromcsv(file, encoding='utf-8')
+                except UnicodeError:    
+                    self.logger.info("Exception encountered trying to load rows with utf-8 encoding, trying latin-1...")
+                    rows = etl.fromcsv(file, encoding='latin-1')
+                header = etl.header(rows)
+                str_header = ', '.join(header)
+                    
+                # pull in schema to create table
+                schema  = self.schema_from_s3()
+                # Create our table creation statement from the downloaded schema.
+                create_ddl = f'CREATE TABLE {self.fully_qualified_table_name} ('
+
+                # First assert the CSV header matches the schema fields. Sometimes "objectid" is excluded.
+                csv_header_set = set([h.strip().lower() for h in str_header.split(',')])
+                schema_field_set = set([s['name'].strip().lower() for s in schema])
+                diff = schema_field_set - csv_header_set
+                diff2 = csv_header_set - schema_field_set
+                diff_join = diff.union(diff2)
+                if diff_join and (diff_join != set({'objectid', 'gdb_geomattr_data'}) and diff_join != set({'gdb_geomattr_data'})):
+                    raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
+
+                # If objectid is missing from JSON schema but present in CSV header, add it
+                if 'objectid' in diff_join and 'objectid' not in schema_field_set:
+                    schema.insert(0, {'name': 'objectid', 'type': 'numeric'})
+                    pass
+
+                # Find geomtry field from csv. Will have our spatial index be properly made on a first table create run.
+                # Force set self.geom_field if we find it.
+                if self.geom_field is None:
+                    for s in schema:
+                        print(s)
+                        if s['type'] == 'geometry':
+                            self._geom_field = s['name']
+                            self.logger.info(f'Detected geometry field from json schema: {self.geom_field}\n')
+                            break
+
+                # Gather columns and types from json schema
+                for i, scheme in enumerate(schema):
+                    col = ''
+                    # for new carto platform which is just postgres, translate datetime to timestamp.
+                    if scheme["type"] == 'datetime':
+                        scheme["type"] = 'timestamp without time zone'
+                    if scheme['type'] == 'geometry':
+                        col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
+                    else:
+                        col = f'{scheme["name"]} {scheme["type"]}'
+
+                    if 'constraints' in scheme.keys():
+                        if 'required' in scheme['constraints'].keys() and scheme['constraints']['required'] == True:
+                            col += ' NOT NULL'
+                        else:
+                            col += ' NULL'
+                    if col:
+                        create_ddl += col
+                        create_ddl += ', '
+                # Remove last comma/space
+                create_ddl = create_ddl[:-2]
+                create_ddl += ')'
+                self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
+                cursor.execute(create_ddl)
+                cursor.execute(f'COMMIT;')
 
 
     def _is_registered(self) -> bool:
@@ -689,12 +709,14 @@ class Postgres():
         only the columns whose headers differ between the data file and the database 
         table need to be included. All column names must be quoted. 
         '''
-        # Check table existence
-        if not create_table:
-            assert self.check_exists(self.table_name, self.table_schema), f'Error! Table {self.fully_qualified_table_name} does not exist in database.'
+        self.get_csv()
+
+        if create_table:
+            self.create_table(file=self.csv_path)
+
+        assert self.check_exists(self.table_name, self.table_schema), f'Error! Table {self.fully_qualified_table_name} does not exist in database.'
 
         mapping_dict = self._make_mapping_dict(column_mappings, mappings_file)
-        self.get_csv()
         self.prepare_file(file=self.csv_path, mapping_dict=mapping_dict, create_table=create_table)
         if truncate_before_load:
             self.delete_from_truncate()

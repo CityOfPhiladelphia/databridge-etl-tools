@@ -28,12 +28,23 @@ RUN apt-get update && \
   && rm -rf /var/lib/apt/lists/*
 
 USER airflow
+WORKDIR /home/airflow/
 
 COPY --chown=airflow:airflow pyproject.toml ./pyproject.toml
 COPY --chown=airflow:airflow databridge_etl_tools ./databridge_etl_tools
+COPY --chown=airflow:airflow tests/ ./tests/
 
 # Python syntax check
 RUN python -m compileall ./databridge_etl_tools
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" .
+
+# Set aws access keys as an env var for use with boto3
+# do this under the worker user.
+# These are passed in via --build-arg at build time.
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
+
+ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY

@@ -96,19 +96,14 @@ def test_postgres_json_schema_extract(pg):
     pg.load_json_schema_to_s3()
 
 # Test DB2
-
-@pytest.fixture(scope='module')
-def connector_string(user, password, host, database): # These parameters are defined in conftest.py
-    return f'postgresql://{user}:{password}@{host}:5432/{database}'
-
 @pytest.fixture
-def db2_client(connector_string):
+def db2_client(user, password, host, database):
     db2_interact_client = Db2(
             table_name='ghactions_test1',
             account_name='citygeo',
             copy_from_source_schema='citygeo',
             enterprise_schema='viewer_citygeo',
-            libpq_conn_string=connector_string,
+            libpq_conn_string=f'postgresql://{user}:{password}@{host}:5432/{database}',
             index_fields='datefield,textfield+numericfield',
             to_srid='3857',
             xshift='-0.20',
