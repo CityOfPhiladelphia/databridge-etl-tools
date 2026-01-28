@@ -137,7 +137,6 @@ jobs:
         GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
         GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
 
-
     # Push to testing repository
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Login to Amazon ECR
@@ -150,5 +149,9 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
       run: |
-        docker tag dbtools-312:latest $ECR_TEST_REPOSITORY_URL:latest
-        docker push $ECR_TEST_REPOSITORY_URL:latest
+        if [ "${{ matrix.dockerfile_prefix }}" == "312" ]; then
+          docker tag dbtools-312:latest $ECR_TEST_REPOSITORY_URL:latest
+          docker push $ECR_TEST_REPOSITORY_URL:latest
+        else
+          echo "Only pushing 312 to ECR for Airflow."
+        fi
