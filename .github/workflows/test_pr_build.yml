@@ -24,8 +24,6 @@ jobs:
     # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
     # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
     - uses: actions/checkout@v3
-      with:
-        ref: master
     
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Configure AWS credentials
