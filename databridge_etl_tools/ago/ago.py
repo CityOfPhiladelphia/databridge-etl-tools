@@ -1031,8 +1031,8 @@ class AGO():
         # now double check to make sure all indexes were made.
 
         print('Checking for missing indexes..')
-        print('Sleep for 1 minute first in hopes that index creation finishes by then..')
-        sleep(60)
+        print('Sleep for 30 seconds first in hopes that index creation finishes by then..')
+        sleep(30)
         check_url = f'https://services.arcgis.com/{self.ago_org_id}/ArcGIS/rest/services/{self.ago_item_name}/FeatureServer/{self.layer_num}?f=pjson'
         print(f'Item defintion json URL: {check_url}')
         headers = {'Content-Type': 'application/x-www-form-urlencoded'}
