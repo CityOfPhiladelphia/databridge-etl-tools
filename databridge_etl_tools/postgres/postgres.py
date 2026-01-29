@@ -343,6 +343,8 @@ class Postgres():
                     # for new carto platform which is just postgres, translate datetime to timestamp.
                     if scheme["type"] == 'datetime':
                         scheme["type"] = 'timestamp without time zone'
+                    if scheme["type"] == 'number':
+                        scheme["type"] = 'numeric'
                     if scheme['type'] == 'geometry':
                         col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
                     else:
