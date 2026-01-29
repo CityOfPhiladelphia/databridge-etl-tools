@@ -3,6 +3,7 @@ import json
 import psycopg2.sql as sql
 from .postgres_map import DATA_TYPE_MAP, GEOM_TYPE_MAP
 
+
 @property
 def csv_path(self):
     if not self.local_csv_path:

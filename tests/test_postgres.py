@@ -2,6 +2,7 @@ import pytest
 import os, textwrap
 import petl as etl
 from databridge_etl_tools.postgres.postgres import Postgres, Postgres_Connector
+from databridge_etl_tools.db2.db2 import Db2
 from .constants import (S3_BUCKET, POINT_TABLE_2272_S3_KEY_CSV, 
                         POINT_TABLE_2272_NAME, FIXTURES_DIR, STAGING_DIR, 
                         POINT_TABLE_2272_CSV)
@@ -93,3 +94,25 @@ def test_postgres_load(extract_data, pg):
 
 def test_postgres_json_schema_extract(pg):
     pg.load_json_schema_to_s3()
+
+# Test DB2
+@pytest.fixture
+def db2_client(user, password, host, database):
+    db2_interact_client = Db2(
+            table_name='ghactions_test1',
+            account_name='citygeo',
+            copy_from_source_schema='citygeo',
+            enterprise_schema='viewer_citygeo',
+            libpq_conn_string=f'postgresql://{user}:{password}@{host}:5432/{database}',
+            index_fields='datefield,textfield+numericfield',
+            to_srid='3857',
+            xshift='-0.20',
+            yshift='+1.18',
+    )
+    return db2_interact_client
+
+def test_db2_copy_to_enterprise(db2_client):
+    db2_client.copy_to_enterprise()
+
+def test_db2_reproject_shapes(db2_client):
+    db2_client.reproject_shapes()

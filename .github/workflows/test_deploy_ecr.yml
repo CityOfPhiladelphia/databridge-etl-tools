@@ -1,4 +1,4 @@
-name: Build, test, and deploy docker image to ECR
+name: Build, test, and deploy docker image to Prod ECR (master commit)
 
 on:
   push:
@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and deploy docker container
+    name: Build, test, push to Prod ECR
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: self-hosted
 
@@ -21,122 +21,100 @@ jobs:
     # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
     # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
     - uses: actions/checkout@v3
-      with:
-        ref: master
 
-  # https://github.com/marketplace/actions/microsoft-teams-deploy-card
-  # Using replacement fork for toko-bifrost, context for why: https://github.com/toko-bifrost/ms-teams-deploy-card/issues/33#issuecomment-888466503 
-    #- uses: toko-bifrost/ms-teams-deploy-card@master
-    # Note: deprecated because of nodejs 12 and seemingly un-updated.
-    # commenting out for now.
-    #- uses: patrickpaulin/ms-teams-deploy-card@master
-    #  if: always()
-    #  with:
-    #    GITHUB-TOKEN: ${{ github.token }}
-    #    WEBHOOK-URI: ${{ secrets.MS_TEAMS_WEBHOOK_URI }}
-    #    card-layout-start: compact
-    #    show-on-start: true
-    #    show-on-exit: true
-    #    custom-facts: |
-    #      - name: Job Progress
-    #        value: Building databridge-etl-tools
-
-    
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@master
+      uses: aws-actions/configure-aws-credentials@main
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: us-east-1
 
-    - name: Pull Oracle Instant Client rpm from S3
-      id: pull-oracle-rpm 
-      run: bash ./scripts/pull-oracle-rpm.sh
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
     # Prune docker system to clear space
     - name: docker system purne
       run: |
          yes | docker system prune
-
+         
     # Build our docker container and insert our AWS secret keys
     # no-cache so we're sure we're getting all changes (such as geopetl changes)
-    - name: Build docker container
+    # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
+    - name: Build 312 docker container
       run: |
-         docker build -t dbtools \
+         docker build -t dbtools-312 \
          --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
          --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
          --no-cache \
-          .
+         -f Dockerfile-312 .
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-       
-    - name: Postgres pytests
+      # Also build an airflow version
+    - name: Build Airflow docker container
       run: |
-          docker run --rm dbtools \
-            pytest tests/test_postgres.py \
-            -vvv -ra --showlocals --tb=long --disable-warnings \
-            --user $POSTGRES_USER \
-            --password $POSTGRES_PASSWORD \
-            --host $POSTGRES_HOST \
-            --database $POSTGRES_DB
+         docker build -t dbtools-airflow \
+         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+         --no-cache \
+         -f Dockerfile-airflow .
+      env: 
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        
+    # Have to do a special entrypoint for the airflow image.
+    - name: Airflow postgres pytests
+      run: |
+          docker run --entrypoint python --rm \
+            -e DB_USER=$POSTGRES_USER \
+            -e DB_HOST=$POSTGRES_HOST \
+            -e DB_PASSWORD=$POSTGRES_PASSWORD \
+            -e DB_HOST=$POSTGRES_HOST \
+            -e DATABASE=$POSTGRES_DB \
+            dbtools-airflow \
+            ./.local/bin/pytest tests/test_postgres.py \
+            -vvv -ra --showlocals --tb=long --disable-warnings
       env:
         POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
 
-        #- name: Oracle pytests
-        #run: |
-        #  docker run --rm dbtools \
-        #  pytest tests/test_oracle.py \
-        #  -vvv -ra --showlocals --tb=long --disable-warnings \
-        #    --user GIS_TEST \
-        #    --password $ORACLE_PASSWORD \
-        #    --host $ORACLE_HOST \
-        #    --database $ORACLE_DB
-        #env:
-        #ORACLE_HOST: ${{ secrets.ORACLE_HOST }}
-        #ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
-        #ORACLE_DB: ${{ secrets.ORACLE_DB }}
-
-    - name: AGO pytests
+    - name: Python 312 postgres pytests
       run: |
-          docker run --rm dbtools \
-            pytest tests/test_ago.py \
-            -s -vvv -ra --showlocals --tb=long --disable-warnings  \
-            --ago_user $AGO_USER \
-            --ago_password $AGO_PASSWORD
+          docker run --rm \
+            -e DB_USER=$POSTGRES_USER \
+            -e DB_HOST=$POSTGRES_HOST \
+            -e DB_PASSWORD=$POSTGRES_PASSWORD \
+            -e DB_HOST=$POSTGRES_HOST \
+            -e DATABASE=$POSTGRES_DB \
+            dbtools-312 \
+            ./.local/bin/pytest tests/test_postgres.py \
+            -vvv -ra --showlocals --tb=long --disable-warnings
       env:
-        AGO_USER: ${{ secrets.AGO_USER }}
-        AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
-
-    - name: Carto pytests
-      run: |
-          docker run --rm dbtools \
-            pytest tests/test_carto.py \
-            -s -vvv -ra --showlocals --tb=long --disable-warnings  \
-            --carto_user $CARTO_USER \
-            --carto_password $CARTO_PASSWORD
-      env:
-        CARTO_USER: ${{ secrets.CARTO_USER }}
-        CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
-
+        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+  
 
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Docker Push to ECR
+    - name: Docker Push 312 to ProdECR
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
       run: |
-        docker tag dbtools:latest $ECR_REPOSITORY_URL:latest
+        docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
         docker push $ECR_REPOSITORY_URL:latest
+
+    - name: Docker Push airflow to Prod ECR
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      run: |
+        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
+        docker push $ECR_REPOSITORY_URL:airflow-latest

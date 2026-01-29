@@ -4,7 +4,6 @@ import click
 import json
 import psycopg
 from psycopg import sql
-import cx_Oracle
 import re
 from shapely import wkb
 from shapely.ops import transform as shp_transform
@@ -17,14 +16,14 @@ class Db2():
     '''One-off functions for databridge v2 stuff'''
     _staging_dataset_name = None
     _enterprise_dataset_name = None
-    _oracle_cursor = None
 
     def __init__(self,
                 table_name,
                 account_name,
+                xshift = None,
+                yshift = None,
                 copy_from_source_schema = None,
                 enterprise_schema = None,
-                oracle_conn_string = None,
                 libpq_conn_string = None,
                 index_fields = None,
                 to_srid = None,
@@ -36,10 +35,13 @@ class Db2():
         self.enterprise_schema = enterprise_schema
         self.libpq_conn_string = libpq_conn_string
         self.index_fields = index_fields.split(',') if index_fields else None
-        self.oracle_conn_string = oracle_conn_string
         self.to_srid = int(to_srid) if to_srid else None
+        # Manual nudge to more closely match ArcGIS's 3857 transformation
+        # (yes I painstakingly lined up to get the default values of -0.20 and +1.18)
+        self.xshift = xshift if xshift else None
+        self.yshift = yshift if yshift else None
         self.staging_schema = 'etl_staging'
-        self.timeout = int(timeout) * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
+        self.timeout = int(timeout) * 60 * 1000 if timeout else 50 * 60 * 1000 # convert minutes to milliseconds for "statement_timeout" in our postgres connections.
         # use this to transform specific to more general data types for staging table
         self.data_type_map = {'character varying': 'text'}
         self.ignore_field_name = []
@@ -50,14 +52,6 @@ class Db2():
         self.m = None
         self.z = None
 
-
-    @property
-    def oracle_cursor(self):
-        if self._oracle_cursor is None: 
-            conn = cx_Oracle.connect(self.oracle_conn_string)
-            conn.autocommit = True
-            self._oracle_cursor = conn.cursor()
-        return self._oracle_cursor
 
     @property
     def staging_dataset_name(self):
@@ -80,16 +74,18 @@ class Db2():
         if not schema and not table:
             exist_stmt = f"SELECT to_regclass('{self.enterprise_schema}.{self.enterprise_dataset_name}');"
             print(f'Table exists statement: {exist_stmt}')
-            with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+            with psycopg.connect(self.libpq_conn_string) as conn:
                 with conn.cursor() as cur:
+                    cur.execute(f"SET statement_timeout = {self.timeout}")
                     cur.execute(exist_stmt)
                     table_exists_check = cur.fetchone()[0]
             return table_exists_check
         else:
             exist_stmt = f"SELECT to_regclass('{schema}.{table}');"
             print(f'Table exists statement: {exist_stmt}')
-            with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+            with psycopg.connect(self.libpq_conn_string) as conn:
                 with conn.cursor() as cur:
+                    cur.execute(f"SET statement_timeout = {self.timeout}")
                     cur.execute(exist_stmt)
                     table_exists_check = cur.fetchone()[0]
             return table_exists_check
@@ -103,8 +99,9 @@ class Db2():
             WHERE table_schema = '{self.enterprise_schema}' and table_name = '{self.enterprise_dataset_name}'
         '''
         print('Running col_info_stmt: ' + col_info_stmt)
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(col_info_stmt)
                 # Format and transform data types:
                 column_info = {i[0]: self.data_type_map.get(i[1], i[1]) for i in cur.fetchall()}
@@ -129,8 +126,9 @@ class Db2():
         '''
         # Identify the geometry column values
         print('Running get_column_name_and_srid_stmt' + get_column_name_and_srid_stmt)
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(get_column_name_and_srid_stmt)
                 col_name1 = cur.fetchall()
 
@@ -195,13 +193,13 @@ class Db2():
                 else:
                     xml_def = result[0]
 
-                    m = re.search("<HasM>\D*<\/HasM>", xml_def)[0]
+                    m = re.search(r"<HasM>\D*<\/HasM>", xml_def)[0]
                     if 'false' in m:
                         self.m = False
                     elif 'true' in m:
                         self.m = True
 
-                    z = re.search("<HasZ>\D*<\/HasZ>", xml_def)[0]
+                    z = re.search(r"<HasZ>\D*<\/HasZ>", xml_def)[0]
                     if 'false' in z:
                         self.z = False
                     elif 'true' in z:
@@ -249,8 +247,9 @@ class Db2():
         #return ddl
 
     def run_ddl(self):
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 drop_stmt = f'DROP TABLE IF EXISTS {self.staging_schema}.{self.enterprise_dataset_name}'
                 # drop first so we have a total refresh
                 print('Running drop stmt: ' + drop_stmt)
@@ -302,8 +301,9 @@ class Db2():
         if lock_type:
             lock_stmt +=  f" AND pg_locks.mode = '{lock_type}'"
         lock_stmt += ';'
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 cur.execute(lock_stmt)
                 locks = cur.fetchall()
                 if locks:
@@ -330,8 +330,9 @@ class Db2():
     def copy_to_enterprise(self):
         ''''Copy from either department table or etl_staging temp table, depending on args passed.'''
         self.get_geom_column_info()
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 prod_table = f'{self.enterprise_schema}.{self.enterprise_dataset_name}'
                 # If etl_staging, that means we got data uploaded from S3 or an ArcPy copy
                 # so use the appropriate name which would be "etl_staging.dept_name__table_name"
@@ -587,8 +588,9 @@ class Db2():
                     cur.execute('COMMIT')
 
         # Note: autocommit takes it out of a transaction.
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}", autocommit=True) as conn:
+        with psycopg.connect(self.libpq_conn_string, autocommit=True) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # Manually run a vacuum on our tables for database performance
                 cur.execute(f'VACUUM VERBOSE {prod_table};')
                 cur.execute('COMMIT')
@@ -656,68 +658,6 @@ class Db2():
 
                 print('\nSuccess!')
 
-    def update_oracle_scn(self):
-        
-        # Commenting this out, instead lets pull the SCN from our recorded table
-        #stmt = f'''SELECT MAX(ora_rowscn) FROM {self.account_name}.{self.table_name.upper()}'''
-        #print('Executing stmt: ' + str(stmt))
-        #self.oracle_cursor.execute(stmt)
-        #current_scn = self.oracle_cursor.fetchone()[0]
-
-        stmt=f'''
-            SELECT SCN FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-            WHERE TABLE_OWNER = '{self.account_name.upper()}'
-            AND TABLE_NAME = '{self.table_name.upper()}'
-            AND STATUS = 'RUNNING'
-        '''
-        self.oracle_cursor.execute(stmt)
-        current_scn = self.oracle_cursor.fetchone()
-
-        # If there is no SCN available, insert NULL which will work in an INT datatype column.
-        if not current_scn:
-            current_scn = 'NULL'
-        else:
-            current_scn = current_scn[0]
-
-        stmt=f'''
-            SELECT SCN FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-            WHERE TABLE_OWNER = '{self.account_name.upper()}'
-            AND TABLE_NAME = '{self.table_name.upper()}'
-            AND STATUS = 'FINISHED'
-        '''
-        print('Executing stmt: ' + str(stmt))
-        self.oracle_cursor.execute(stmt)
-        old_scn = self.oracle_cursor.fetchone()
-
-        # Because Oracle is an outdated database product, we don't have upsert and need to do
-        # either an insert or update depending if the row we want already exists.
-        if old_scn is None:
-            stmt = f'''
-            INSERT INTO GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY (TABLE_OWNER, TABLE_NAME, SCN, STATUS)
-                VALUES('{self.account_name.upper()}', '{self.table_name.upper()}', {current_scn}, 'FINISHED')
-            '''
-        elif old_scn:
-            stmt = f'''
-            UPDATE GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY SET SCN={current_scn}
-                WHERE TABLE_OWNER = '{self.account_name.upper()}'
-                AND TABLE_NAME = '{self.table_name.upper()}'
-                AND STATUS = 'FINISHED'
-            '''
-        print('Executing stmt: ' + str(stmt))
-        self.oracle_cursor.execute(stmt)
-    
-        # Remove RUNNING scn from the history table
-        if current_scn:
-            stmt=f'''
-                DELETE FROM GIS_GSG.DB2_ORACLE_TRANSACTION_HISTORY
-                WHERE TABLE_OWNER = '{self.account_name.upper()}'
-                AND TABLE_NAME = '{self.table_name.upper()}'
-                AND STATUS = 'RUNNING'
-            '''
-            print('Executing stmt: ' + str(stmt))
-            self.oracle_cursor.execute(stmt)
-
-
     def build_reprojector(self):
         """
         sub-function of reproject_shapes().
@@ -729,6 +669,15 @@ class Db2():
             3) 4326 -> 3857
         - For 4326 -> 3857: single step.
         """
+        if self.geom_info['srid'] == self.to_srid:
+            raise NotImplementedError("No reprojection needed, source and target SRID are the same. Have not implemented manual nudge yet if thats what you want.")
+            #print('No reprojection needed, source and target SRID are the same. Will only manually nudge!')
+            #t_shift = Transformer.from_pipeline(
+            #    f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
+            #)
+            #def reproj_auto(*args):
+
+
         if self.geom_info['srid'] == 2272 and self.to_srid == 3857:
             t1 = Transformer.from_crs("EPSG:2272", "EPSG:4269", always_xy=True)    # ftUS -> deg
             # NOTE: 1950 is NAD83->NAD83(CSRS)(4). If you want ArcGIS “_5”, use EPSG:1515 instead.
@@ -736,12 +685,9 @@ class Db2():
             # t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1515")
             t3 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)    # deg -> m
 
-            # Manual nudge to more closely match ArcGIS's 3857 transformation
-            # (yes I painstakingly lined this up)
-            DX_M = -0.20 # west by 20 cm
-            DY_M = +1.18  # north by 118 cm
+            # Manual nudge in cm to align with arcgis projections
             t_shift = Transformer.from_pipeline(
-                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={DX_M} +yoff={DY_M}"
+                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
             )
 
             def reproj_vec(xyz: np.ndarray) -> np.ndarray:
@@ -819,8 +765,9 @@ class Db2():
             vals=sql.SQL(", ").join(sql.Placeholder() for _ in non_geom_cols),
         )
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 print('Beginning transform/copy..')
                 cur.execute(select_sql)
                 rows = cur.fetchmany(batch)
@@ -840,6 +787,7 @@ class Db2():
                         params.append(tuple(attrs) + (ewkb_out, self.to_srid))
 
                     with conn.cursor() as cur2:
+                        cur2.execute(f"SET statement_timeout = {self.timeout}")
                         cur2.executemany(insert_sql, params)
                     conn.commit()
 
@@ -865,8 +813,9 @@ class Db2():
         # Build the coordinate transformer
         reproj = self.build_reprojector()
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # confirm our source exists
                 assert self.confirm_table_existence()
                 # confirm our destination table exists, if not make it.
@@ -900,8 +849,9 @@ class Db2():
                 # Stream, transform, insert
                 self.copy_rows_transformed(dest_table, reproj)
 
-        with psycopg.connect(self.libpq_conn_string, options=f"-c statement_timeout={self.timeout}") as conn:
+        with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
+                cur.execute(f"SET statement_timeout = {self.timeout}")
                 # Try to make shape index always
                 if self.geom_info:
                     geom_column = self.geom_info['geom_field']

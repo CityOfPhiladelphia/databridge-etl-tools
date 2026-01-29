@@ -7,21 +7,24 @@ build-backend = "setuptools.build_meta"
 [tools.setuptools]
 py_modules = ['databridge_etl_tools']
 
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["venv*", "tests*", "docs*"]
+
 [project]
 name = "databridge-etl-tools"
-version = "1.4.2" 
+version = "1.5.0" 
 description = "Command line tools to extract and load SQL data to various endpoints"
 authors = [
     {name = "citygeo", email = "maps@phila.gov"},
 ]
-requires-python = ">=3.7,<3.10"
+requires-python = ">=3.11,<3.14"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 dependencies = [
-    "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@master",
-    "setuptools>=67.6.0",
-    "arcgis",
-    "boto3>=1.21.15",
+    "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
+    "setuptools",
+    "boto3",
     "botocore",
     "certifi",
     "chardet",
@@ -30,32 +33,35 @@ dependencies = [
     "future",
     "idna",
     "jmespath",
+    "moto",
     "mock",
     "petl",
     "pyrestcli",
     "python-dateutil",
     "pyproj",
+    "pytz",
     "requests",
     "s3transfer",
     "six",
-    "numpy<=1.22.0",
-    "Shapely==1.8.1.post1",
-    "cx_Oracle>=8.3.0",
-    "psycopg2-binary==2.9.3",
+    "numpy",
+    "Shapely",
+    "psycopg",
+    "psycopg2-binary",
     "six",
     "carto",
     "moto",
+    "pandas",
     "pytest",
     "requests-mock",
     "stringcase", 
     "hurry.filesize", 
     "smart_open", 
     "retrying",
-    "azure-core",
-    "azure-identity",
-    "msgraph-core",
-    "msgraph-beta-sdk",
-    "openpyxl"
+    "azure-core", # Necessary for sharepoint
+    "azure-identity", # Necessary for sharepoint
+    "msgraph-core", # Necessary for sharepoint
+    "msgraph-beta-sdk", # Necessary for sharepoint
+    "openpyxl" # Necessary for sharepoint
 ]
 
 # installs our command as a cli runnable script

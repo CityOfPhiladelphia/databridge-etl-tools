@@ -2,7 +2,7 @@
 import pytest
 import os
 
-from moto.s3 import mock_s3
+from moto import mock_aws
 import boto3
 
 from .constants import (
@@ -17,61 +17,46 @@ from _pytest.assertion import truncate
 truncate.DEFAULT_MAX_LINES = 9999
 truncate.DEFAULT_MAX_CHARS = 9999
 
-# Command line options to be used in our test python files
-# Note: docs say this should only be in the conftest.py file.
-def pytest_addoption(parser):
-    parser.addoption("--user", action="store", default='GIS_TEST', help="db user name")
-    parser.addoption("--host", action="store", default='some-host.gov', help="db host")
-    parser.addoption("--password", action="store", default='password', help="db user password")
-    parser.addoption("--database", action="store", default='adatabase',  help="db database name")
-    parser.addoption("--ago_user", action="store", default='some_user',  help="user for AGO login")
-    parser.addoption("--ago_password", action="store", default='some_p',  help="pw for AGO login")
-    parser.addoption("--carto_user", action="store", default='some_user',  help="user for Carto login")
-    parser.addoption("--carto_password", action="store", default='some_pw',  help="pw for Carto login")
-    parser.addoption("--graphapi_application_id", action="store", default="some_application_id", help="Application ID for Microsoft Graph API client creation")
-    parser.addoption("--graphapi_tenant_id", action="store", default="some_tenant_id", help="Tenant ID for Microsoft Graph API client creation")
-    parser.addoption("--graphapi_secret_value", action="store", default="some_secret", help="Secret Value for Microsoft Graph API client creation")
-
 # Necessary for our tests to access the parameters/args as specified
 # Fixtures are just functions that return objects that can be used by
 # multiple tests
 # in conftest.py
 @pytest.fixture(scope='session')
 def user(pytestconfig):
-    return pytestconfig.getoption("user")
+    return os.environ.get("DB_USER")
 @pytest.fixture(scope='session')
 def host(pytestconfig):
-    return pytestconfig.getoption("host")
+    return os.environ.get("DB_HOST")
 @pytest.fixture(scope='session')
 def password(pytestconfig):
-    return pytestconfig.getoption("password")
+    return os.environ.get("DB_PASSWORD")
 @pytest.fixture(scope='session')
 def database(pytestconfig):
-    return pytestconfig.getoption("database")
+    return os.environ.get("DATABASE")
 
 @pytest.fixture(scope='session')
 def ago_user(pytestconfig):
-    return pytestconfig.getoption("ago_user")
+    return os.environ.get("AGO_USER")
 @pytest.fixture(scope='session')
 def ago_password(pytestconfig):
-    return pytestconfig.getoption("ago_password")
+    return os.environ.get("AGO_PASSWORD")
 
 @pytest.fixture(scope='session')
 def carto_user(pytestconfig):
-    return pytestconfig.getoption("carto_user")
+    return os.environ.get("CARTO_USER")
 @pytest.fixture(scope='session')
 def carto_password(pytestconfig):
-    return pytestconfig.getoption("carto_password")
+    return os.environ.get("CARTO_PASSWORD")
 
 @pytest.fixture(scope='session')
 def graphapi_tenant_id(pytestconfig):
-    return pytestconfig.getoption("graphapi_tenant_id")
+    return os.environ.get("GRAPHAPI_TENANT_ID")
 @pytest.fixture(scope='session')
 def graphapi_application_id(pytestconfig):
-    return pytestconfig.getoption("graphapi_application_id")
+    return os.environ.get("GRAPHAPI_APPLICATION_ID")
 @pytest.fixture(scope='session')
 def graphapi_secret_value(pytestconfig):
-    return pytestconfig.getoption("graphapi_secret_value")
+    return os.environ.get("GRAPHAPI_SECRET_VALUE")
 
 
 @pytest.fixture(scope='session')

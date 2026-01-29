@@ -13,7 +13,8 @@ import click
 @click.option('--table_schema', required=True)
 @click.option('--s3_bucket', required=False)
 @click.option('--s3_key', required=False)
-@click.option('--local_csv_path', required=False)
+@click.option('--local_csv_path', default='/tmp/output.csv', required=False)
+@click.option('--index_fields', required=False, default=None, help='Optionally specify the fields to index')
 def postgres(ctx, **kwargs):
     '''Run ETL commands for Postgres'''
     ctx.obj = {}
@@ -55,6 +56,7 @@ def extract_json_schema(ctx):
     {"data_col": "db_table_col", "data_col2": "db_table_col2", ... }. Note no quotes 
     around the curly braces `{}`.
 ''')
+@click.option('--create_table', is_flag=True, required=False, help='Optionally try to create the table before loading.')
 def load(ctx, **kwargs):
     """
     Prepare and COPY a CSV from S3 to a Postgres table. The keyword arguments 

@@ -14,6 +14,7 @@ def sharepoint_csv(graphapi_tenant_id,
         file_path="etl_tools_test_sheet.csv",
         s3_bucket=S3_BUCKET,
         s3_key="staging/test/sharepoint_csv_test.csv",
+        csv_path='/tmp/output.csv',
         debug=True
         )
     return sharepoint_csv_object
@@ -34,6 +35,7 @@ def sharepoint_xlsx(graphapi_tenant_id,
         s3_bucket=S3_BUCKET,
         s3_key="staging/test/sharepoint_xlsx_test.csv",
         sheet_name="Dataset",
+        csv_path='/tmp/output.csv',
         debug=True
     )
     return sharepoint_xlsx_object

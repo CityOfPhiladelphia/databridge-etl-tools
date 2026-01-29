@@ -26,8 +26,8 @@ class Sharepoint():
                  site_name,
                  file_path,
                  csv_path,
-                 s3_bucket,
-                 s3_key,
+                 s3_bucket=None,
+                 s3_key=None,
                  **kwargs):
         self.debug = kwargs.get('debug', False)
 
@@ -51,7 +51,7 @@ class Sharepoint():
         self.sheet_name = kwargs.get('sheet_name', None)
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        self.csv_path = csv_path or '/tmp/output.csv'
+        self.csv_path = csv_path
     
     def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
@@ -137,12 +137,12 @@ class Sharepoint():
             print(f"File content of {self.file_path} obtained")
         self.write_to_csv(content)
         if self.debug:
-            print(f"Content written to temporary csv")
+            print(f"Content written to temporary csv at {self.csv_path}")
+        
         if self.s3_bucket and self.s3_key:
             self.load_to_s3()
-        if self.debug:
-            print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
-            print("Extraction complete!")
+            if self.debug:
+                print(f"Content successfully loaded to {self.s3_bucket}/{self.s3_key}")
 
         # TODO: consider whether to use logger instead
         # if self.remaining.days < 30: 
