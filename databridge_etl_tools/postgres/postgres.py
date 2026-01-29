@@ -157,10 +157,10 @@ class Postgres():
                             # compile the indexes into a comma separated string because we don't know how many could be in the compound.
                             cols = ', '.join(split_indexes)
                             idx_name = '_'.join(split_indexes) + '_idx'
-                            index_stmt = f'CREATE INDEX IF NOT EXISTS {idx_name}_idx ON {self.fully_qualified_table_name} USING btree ({cols});'
+                            index_stmt = f'CREATE INDEX IF NOT EXISTS {self.table_name}_{idx_name}_idx ON {self.fully_qualified_table_name} USING btree ({cols});'
                         # If single index
                         else:
-                            index_stmt = f'CREATE INDEX IF NOT EXISTS {i}_idx ON {self.fully_qualified_table_name} USING btree ({i});'
+                            index_stmt = f'CREATE INDEX IF NOT EXISTS {self.table_name}_{i}_idx ON {self.fully_qualified_table_name} USING btree ({i});'
                         print('Running index_stmt: ' + str(index_stmt))
                         cursor.execute(index_stmt)
                         cursor.execute('COMMIT;')
@@ -173,7 +173,7 @@ class Postgres():
                 try:
                     print('Always attempting to install shape index...')
                     geom_column = self.geom_field
-                    shape_index_stmt = f'CREATE INDEX IF NOT EXISTS {self.geom_field}_gist ON {self.fully_qualified_table_name} USING GIST ({self.geom_field});'
+                    shape_index_stmt = f'CREATE INDEX IF NOT EXISTS {self.table_name}_{self.geom_field}_gist ON {self.fully_qualified_table_name} USING GIST ({self.geom_field});'
                     print('\nRunning shape_index_stmt: ' + str(shape_index_stmt))
                     cursor.execute(shape_index_stmt)
                     cursor.execute('COMMIT;')
