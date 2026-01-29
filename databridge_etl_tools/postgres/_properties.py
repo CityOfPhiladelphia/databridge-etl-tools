@@ -95,6 +95,13 @@ def export_json_schema(self):
             results = self.execute_sql(stmt, data=[self.table_name, self.table_schema], fetch='one')
             if results:
                 srid = results[0]
+            if not srid:
+                # Fallback method to get srid
+                stmt = sql.SQL(f'''
+                SELECT st_srid({self.geom_field}) from {self.table_schema}.{self.table_name} where {self.geom_field} is not null limit 1;
+                ''')
+                results = self.execute_sql(stmt, data=[self.table_schema, self.table_name, self.geom_field], fetch='one')
+                srid = results[0]
             assert srid
 
             if self.geom_type.lower() == 'multipolygon' or self.geom_type.lower() == 'polygon':
@@ -327,25 +334,44 @@ def geom_type(self):
 # should only get called once.
 @geom_type.setter
 def geom_type(self, value):
-    valid_geom_types = ['point', 'linestring', 'polygon', 'multipoint', 'multilinestring', 'multipolygon']
+    valid_geom_types = ['POINT', 'LINESTRING', 'POLYGON', 'MULTIPOINT', 'MULTILINESTRING', 'MULTIPOLYGON']
     if self.table_name == 'testing' and self.table_schema == 'test':
         # If we recieve these values, this is the unit tests being run by tests/test_postgres.py
         # Return something so it doesn't attempt to make a connection, as conn info passed by the
         # tests is bogus.
         self._geom_type = 'POINT'
     else:
-        check_table_stmt = "SELECT EXISTS(SELECT * FROM pg_proc WHERE proname = 'geometry_type');"
-        result = self.execute_sql(check_table_stmt, fetch='one')[0]
-        if result:
+        check_geom_table_stmt = "SELECT EXISTS(SELECT * FROM pg_proc WHERE proname = 'geometry_type');"
+        db_geom_enabled = self.execute_sql(check_geom_table_stmt, fetch='one')[0]
+        # NOTE: we want the geom_type to be None sometimes, because this function is still called by upsert-csv
+        # and isn't necessarily looking at a database. So check if we have table_schema and a geom_database.
+        # If no schema, you're probably doing upsert_csv.
+        if db_geom_enabled and self.table_schema:
             geom_stmt = f'''
     SELECT geometry_type('{self.table_schema}', '{self.table_name}', '{self.geom_field}')
             '''
+            print(geom_stmt)
             result = self.execute_sql(geom_stmt, fetch='one')
             if result == None:
                 self._geom_type = None
             else:
+                # At this point we could still have a bad geom type, so validate it later down.
                 self._geom_type = result[0]
         else:
             self._geom_type = None
-    if len(self._geom_type.split(' ')) > 1 or self._geom_type.lower() not in valid_geom_types:
-        raise Exception(f'Bad geometry type! Please fix this tables geom type! Got: {self._geom_type}')
+    # if still not geom_type, set to empty string so below block parses.
+    if not self._geom_type and (db_geom_enabled and self.table_schema):
+        self._geom_type = ''
+    if db_geom_enabled and self.table_schema:
+        if len(self._geom_type.split(' ')) > 1 or self._geom_type.upper() not in valid_geom_types:
+            print(f'Got invalid shape type ({self._geom_type}), trying to manually grab the geometry type...')
+            geom_type_stmt = f'''SELECT ST_GeometryType({self.geom_field}) 
+                FROM {self.table_schema}.{self.table_name} 
+                where {self.geom_field} is not null limit 1;'''
+            result = self.execute_sql(geom_type_stmt, fetch='one')
+            if result:
+                result = result[0].replace('ST_','').upper()
+            if result and len(result.split(' ')) == 1 and result.upper() in valid_geom_types:
+                self._geom_type = result[0]
+            else:
+                raise Exception(f'Could not determine valid geometry type for table {self.table_schema}.{self.table_name} got result: {self._geom_type}')
