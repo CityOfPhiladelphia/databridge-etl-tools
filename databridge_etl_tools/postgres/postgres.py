@@ -348,6 +348,7 @@ class Postgres():
                 # Gather columns and types from json schema
                 for i, scheme in enumerate(schema):
                     col = ''
+                    
                     # for new carto platform which is just postgres, translate old carto data types to just postgres types
                     if scheme["type"] == 'datetime':
                         scheme["type"] = 'timestamp without time zone'
@@ -356,6 +357,9 @@ class Postgres():
                     # array type to text array: https://www.postgresql.org/docs/current/arrays.html
                     if scheme["type"] == 'array':
                         scheme["type"] = 'text[]'
+                    if scheme["type"] == 'string':
+                        scheme["type"] = 'text'
+
                     if scheme['type'] == 'geometry':
                         col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
                     else:
