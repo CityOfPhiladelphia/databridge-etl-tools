@@ -327,6 +327,7 @@ def geom_type(self):
 # should only get called once.
 @geom_type.setter
 def geom_type(self, value):
+    valid_geom_types = ['point', 'linestring', 'polygon', 'multipoint', 'multilinestring', 'multipolygon']
     if self.table_name == 'testing' and self.table_schema == 'test':
         # If we recieve these values, this is the unit tests being run by tests/test_postgres.py
         # Return something so it doesn't attempt to make a connection, as conn info passed by the
@@ -346,3 +347,5 @@ def geom_type(self, value):
                 self._geom_type = result[0]
         else:
             self._geom_type = None
+    if len(self._geom_type.split(' ')) > 1 or self._geom_type.lower() not in valid_geom_types:
+        raise Exception(f'Bad geometry type! Please fix this tables geom type! Got: {self._geom_type}')
