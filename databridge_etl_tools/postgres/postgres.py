@@ -292,6 +292,14 @@ class Postgres():
                 str_header = str_header.replace(f'{old_col}', 'objectid')
             rows = rows.rename({old:new for old, new in zip(header, str_header.split(', '))})
 
+        # Convert array type to have curly braces instead of square braces for postgres
+        schema  = self.schema_from_s3()
+        print(schema)
+        for i, scheme in enumerate(schema):
+            if scheme['type'] == 'array':
+                print(f'Converting column {scheme["name"]} array type to have curly braces for postgres...')
+                rows = etl.convert(rows, scheme['name'], lambda v: v.replace('[', '{').replace(']', '}'))
+
         # Write our possibly modified lines into the temp_csv file
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
@@ -340,11 +348,14 @@ class Postgres():
                 # Gather columns and types from json schema
                 for i, scheme in enumerate(schema):
                     col = ''
-                    # for new carto platform which is just postgres, translate datetime to timestamp.
+                    # for new carto platform which is just postgres, translate old carto data types to just postgres types
                     if scheme["type"] == 'datetime':
                         scheme["type"] = 'timestamp without time zone'
                     if scheme["type"] == 'number':
                         scheme["type"] = 'numeric'
+                    # array type to text array: https://www.postgresql.org/docs/current/arrays.html
+                    if scheme["type"] == 'array':
+                        scheme["type"] = 'text[]'
                     if scheme['type'] == 'geometry':
                         col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
                     else:
