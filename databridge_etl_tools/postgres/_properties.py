@@ -182,7 +182,7 @@ def fields_and_types(self):
     else:
         if self.database_object_type == 'table':
             stmt = """
-                select column_name as name, data_type as type
+                select column_name as name, data_type, udt_name as udt_type
                 from information_schema.columns
                 where table_schema = '{}' and table_name = '{}'
                 """.format(self.table_schema, self.table_name)
