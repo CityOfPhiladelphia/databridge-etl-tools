@@ -295,8 +295,8 @@ class Postgres():
         # Convert array type to have curly braces instead of square braces for postgres
         # first attempt to get schemas/types directly frm db.
         if self.check_exists(self.table_name, self.table_schema):
-            for f_name,f_type in self.fields_and_types:
-                if f_type.lower() == 'text[]' or f_type.lower() == 'array':
+            for f_name,f_type,udt_type in self.fields_and_types:
+                if udt_type.lower() == '_text' or f_type.lower() == 'array':
                     self.logger.info(f'Converting column {f_name} array type to have curly braces for postgres...')
                     rows = etl.convert(rows, f_name, lambda v: v.replace('[', '{').replace(']', '}'))
         # If we fail getting types directly from DB (first time loading the table and this tool hasn't made the table yet?), then get schema from S3 JSON
