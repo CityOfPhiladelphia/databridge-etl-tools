@@ -293,12 +293,19 @@ class Postgres():
             rows = rows.rename({old:new for old, new in zip(header, str_header.split(', '))})
 
         # Convert array type to have curly braces instead of square braces for postgres
-        schema  = self.schema_from_s3()
-        print(schema)
-        for i, scheme in enumerate(schema):
-            if scheme['type'] == 'array':
-                print(f'Converting column {scheme["name"]} array type to have curly braces for postgres...')
-                rows = etl.convert(rows, scheme['name'], lambda v: v.replace('[', '{').replace(']', '}'))
+        # first attempt to get schemas/types directly frm db.
+        if self.check_exists(self.table_name, self.table_schema):
+            for f_name,f_type in self.fields_and_types:
+                if f_type.lower() == 'text[]' or f_type.lower() == 'array':
+                    self.logger.info(f'Converting column {f_name} array type to have curly braces for postgres...')
+                    rows = etl.convert(rows, f_name, lambda v: v.replace('[', '{').replace(']', '}'))
+        # If we fail getting types directly from DB (first time loading the table and this tool hasn't made the table yet?), then get schema from S3 JSON
+        else:
+            schema  = self.schema_from_s3()
+            for i, scheme in enumerate(schema):
+                if scheme['type'] == 'array':
+                    print(f'Converting column {scheme["name"]} array type to have curly braces for postgres...')
+                    rows = etl.convert(rows, scheme['name'], lambda v: v.replace('[', '{').replace(']', '}'))
 
         # Write our possibly modified lines into the temp_csv file
         write_file = self.temp_csv_path
