@@ -51,7 +51,7 @@ class Sharepoint():
         self.sheet_name = kwargs.get('sheet_name', None)
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        self.csv_path = csv_path
+        self.csv_path = kwargs.get('csv_path', '/tmp/output.csv') # default path necessary to save before going to s3 if extracting
     
     def get_client(self) -> tuple[GraphServiceClient, str, int]:
         """Create a GraphAPI Client. Also returns the number of days for which 
