@@ -61,7 +61,12 @@ def pg(connector):
                   s3_bucket=S3_BUCKET,
                   s3_key=POINT_TABLE_2272_S3_KEY_CSV, 
                   with_srid=True) as pg_obj:
-        yield pg_obj        
+        yield pg_obj
+
+# Necessary in case prior broken tests left it empty.
+def test_postgres_initial_load(pg):
+    pg.truncate()
+    pg.load()
 
 @pytest.fixture(scope='module')
 def extract_data(append_to_table, pg):
@@ -82,7 +87,7 @@ def assert_two_datasets_same(rows1, rows2):
         Added rows ({added_nrows}) and/or deleted rows ({subtracted_nrows}) are not zero!''')
 
 def test_postgres_upsert(extract_data, pg):
-    pg.upsert('csv')
+    pg.upsert(method='csv')
     upserted_data = pg.extract(return_data=True)
     assert_two_datasets_same(extract_data, upserted_data)
 
