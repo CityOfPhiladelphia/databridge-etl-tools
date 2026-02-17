@@ -23,7 +23,8 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
-    "setuptools",
+    "setuptools<80", # pinned to an older version of setuptools to make the carto package work, until we can remove it.
+    "carto",
     "boto3",
     "botocore",
     "certifi",
@@ -48,7 +49,6 @@ dependencies = [
     "psycopg",
     "psycopg2-binary",
     "six",
-    "carto",
     "moto",
     "pandas",
     "pytest",
