@@ -116,7 +116,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
         run: |
-          docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:latest
+          docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:airflow-latest
           docker push $ECR_TEST_REPOSITORY_URL:latest
 
       # Deploy to prod  on master
@@ -127,5 +127,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
         run: |
-          docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
+          docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
           docker push $ECR_REPOSITORY_URL:latest
