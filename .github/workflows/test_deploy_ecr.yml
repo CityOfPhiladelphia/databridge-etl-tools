@@ -48,36 +48,7 @@ jobs:
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      # Also build an airflow version
-    - name: Build Airflow docker container
-      run: |
-         docker build -t dbtools-airflow \
-         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-         --no-cache \
-         -f Dockerfile-airflow .
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         
-    # Have to do a special entrypoint for the airflow image.
-    - name: Airflow postgres pytests
-      run: |
-          docker run --entrypoint python --rm \
-            -e DB_USER=$POSTGRES_USER \
-            -e DB_HOST=$POSTGRES_HOST \
-            -e DB_PASSWORD=$POSTGRES_PASSWORD \
-            -e DB_HOST=$POSTGRES_HOST \
-            -e DATABASE=$POSTGRES_DB \
-            dbtools-airflow \
-            ./.local/bin/pytest tests/test_postgres.py \
-            -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-
     - name: Python 312 postgres pytests
       run: |
           docker run --rm \
@@ -109,12 +80,3 @@ jobs:
       run: |
         docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
         docker push $ECR_REPOSITORY_URL:latest
-
-    - name: Docker Push airflow to Prod ECR
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-      run: |
-        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
-        docker push $ECR_REPOSITORY_URL:airflow-latest

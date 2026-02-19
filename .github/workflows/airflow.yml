@@ -1,31 +1,18 @@
-name: Build, test, and deploy docker image to Test ECR (PR)
+name: Build, test, and deploy Airflow docker image to Test or PROD ECR
 
 on:
-  pull_request:
+  push:
     branches:
-      - '**'
-
-concurrency:
-  group: testing_environment
-  cancel-in-progress: false
+      - main
+  pull_request: {}
 
 jobs:
   build:
-    strategy:
-      matrix:
-        dockerfile_prefix: [311,312,313]
-    name: Build, test, push to Test ECR
-    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    name: Build, test, and deploy Airflow docker image to Test or PROD ECR
     runs-on: self-hosted
-
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    # This is a github function? Ref doc: https://github.com/actions/checkout#checkout-a-different-branch
-    # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
-    # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
     - uses: actions/checkout@v3
-    
-    # https://github.com/aws-actions/amazon-ecr-login
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@main
       with:
@@ -34,24 +21,16 @@ jobs:
         aws-region: us-east-1
 
     # Prune docker system to clear space
-    - name: docker system prune
+    - name: docker system purne
       run: |
          yes | docker system prune
 
-    # Build our docker container and insert our AWS secret keys
-    # no-cache so we're sure we're getting all changes (such as geopetl changes)
-    # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
-    - name: Build docker container
+    - name: Build Airflow docker container
       run: |
-         docker build -t dbtools-${{ matrix.dockerfile_prefix }} \
-         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+         docker build -t dbtools-airflow \
          --no-cache \
-         -f Dockerfile-${{ matrix.dockerfile_prefix }} .
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
+         -f Dockerfile-airflow .
+        
     # Have to do a special entrypoint for the airflow image.
     - name: Postgres pytests
       run: |
@@ -61,7 +40,9 @@ jobs:
             -e DB_PASSWORD=$POSTGRES_PASSWORD \
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
-            dbtools-${{ matrix.dockerfile_prefix }} \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+            dbtools-airflow \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
       env:
@@ -69,30 +50,40 @@ jobs:
         POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
         POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: AGO pytests
       run: |
           docker run --entrypoint python --rm \
             -e AGO_USER=$AGO_USER \
             -e AGO_PASSWORD=$AGO_PASSWORD \
-             dbtools-${{ matrix.dockerfile_prefix }} \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+             dbtools-airflow \
             ./.local/bin/pytest tests/test_ago.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
       env:
         AGO_USER: ${{ secrets.AGO_USER }}
         AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Carto pytests
       run: |
           docker run --entrypoint python --rm \
             -e CARTO_USER=$CARTO_USER \
             -e CARTO_PASSWORD=$CARTO_PASSWORD \
-            dbtools-${{ matrix.dockerfile_prefix }} \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+            dbtools-airflow \
             ./.local/bin/pytest tests/test_carto.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
       env:
         CARTO_USER: ${{ secrets.CARTO_USER }}
         CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Sharepoint pytests
       run: |
@@ -100,28 +91,36 @@ jobs:
           -e GRAPHAPI_APPLICATION_ID=$GRAPHAPI_APPLICATION_ID \
           -e GRAPHAPI_TENANT_ID=$GRAPHAPI_TENANT_ID \
           -e GRAPHAPI_SECRET_VALUE=$GRAPHAPI_SECRET_VALUE \
-          dbtools-${{ matrix.dockerfile_prefix }} \
+          -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+          -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+          dbtools-airflow \
           ./.local/bin/pytest tests/test_sharepoint.py \
           -s -vvv -ra --showlocals --tb=long --disable-warnings
       env: 
         GRAPHAPI_APPLICATION_ID: ${{ secrets.GRAPHAPI_APPLICATION_ID }}
         GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
         GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-
-    - name: Docker Push 312 to ECR test (databridge-etl-tools-v2-testing)
+    # Deploy to test if not on master
+    - name: Deploy test ECR
+      if: github.ref != 'refs/heads/master'
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
       run: |
-        if [ "${{ matrix.dockerfile_prefix }}" == "312" ]; then
-          docker tag dbtools-312:latest $ECR_TEST_REPOSITORY_URL:latest
-          docker push $ECR_TEST_REPOSITORY_URL:latest
-        else
-          echo "This step only for pushing 312 to ECR for Airflow."
-        fi
+        docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:latest
+        docker push $ECR_TEST_REPOSITORY_URL:latest
+
+    # Deploy to prod  on master
+    - name: Deploy prod ECR
+      if: github.ref == 'refs/heads/master'
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+      run: |
+        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
+        docker push $ECR_REPOSITORY_URL:latest
