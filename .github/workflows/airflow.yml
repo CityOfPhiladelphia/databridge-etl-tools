@@ -117,7 +117,7 @@ jobs:
           ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
         run: |
           docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:airflow-latest
-          docker push $ECR_TEST_REPOSITORY_URL:latest
+          docker push $ECR_TEST_REPOSITORY_URL:airflow-latest
 
       # Deploy to prod  on master
       - name: Deploy prod ECR
@@ -128,4 +128,4 @@ jobs:
           ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
         run: |
           docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
-          docker push $ECR_REPOSITORY_URL:latest
+          docker push $ECR_REPOSITORY_URL:airflow-latest
