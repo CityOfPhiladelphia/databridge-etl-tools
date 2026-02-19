@@ -11,29 +11,29 @@ jobs:
     name: Build, test, and deploy Airflow docker image to Test or PROD ECR
     runs-on: self-hosted
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@main
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@main
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-    # Prune docker system to clear space
-    - name: docker system purne
-      run: |
-         yes | docker system prune
+      # Prune docker system to clear space
+      - name: docker system purne
+        run: |
+          yes | docker system prune
 
-    - name: Build Airflow docker container
-      run: |
-         docker build -t dbtools-airflow \
-         --no-cache \
-         -f Dockerfile-airflow .
-        
-    # Have to do a special entrypoint for the airflow image.
-    - name: Postgres pytests
-      run: |
+      - name: Build Airflow docker container
+        run: |
+          docker build -t dbtools-airflow \
+          --no-cache \
+          -f Dockerfile-airflow .
+
+      # Have to do a special entrypoint for the airflow image.
+      - name: Postgres pytests
+        run: |
           docker run --entrypoint python --rm \
             -e DB_USER=$POSTGRES_USER \
             -e DB_HOST=$POSTGRES_HOST \
@@ -41,86 +41,86 @@ jobs:
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
             -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
             dbtools-airflow \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: AGO pytests
-      run: |
+      - name: AGO pytests
+        run: |
           docker run --entrypoint python --rm \
             -e AGO_USER=$AGO_USER \
             -e AGO_PASSWORD=$AGO_PASSWORD \
             -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
              dbtools-airflow \
             ./.local/bin/pytest tests/test_ago.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        AGO_USER: ${{ secrets.AGO_USER }}
-        AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        env:
+          AGO_USER: ${{ secrets.AGO_USER }}
+          AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Carto pytests
-      run: |
+      - name: Carto pytests
+        run: |
           docker run --entrypoint python --rm \
             -e CARTO_USER=$CARTO_USER \
             -e CARTO_PASSWORD=$CARTO_PASSWORD \
             -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-            -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
             dbtools-airflow \
             ./.local/bin/pytest tests/test_carto.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        CARTO_USER: ${{ secrets.CARTO_USER }}
-        CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        env:
+          CARTO_USER: ${{ secrets.CARTO_USER }}
+          CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Sharepoint pytests
-      run: |
-        docker run --entrypoint python --rm \
-          -e GRAPHAPI_APPLICATION_ID=$GRAPHAPI_APPLICATION_ID \
-          -e GRAPHAPI_TENANT_ID=$GRAPHAPI_TENANT_ID \
-          -e GRAPHAPI_SECRET_VALUE=$GRAPHAPI_SECRET_VALUE \
-          -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-          -e AWS_SECRET_ACCESS_KEY = $AWS_SECRET_ACCESS_KEY \
-          dbtools-airflow \
-          ./.local/bin/pytest tests/test_sharepoint.py \
-          -s -vvv -ra --showlocals --tb=long --disable-warnings
-      env: 
-        GRAPHAPI_APPLICATION_ID: ${{ secrets.GRAPHAPI_APPLICATION_ID }}
-        GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
-        GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Sharepoint pytests
+        run: |
+          docker run --entrypoint python --rm \
+            -e GRAPHAPI_APPLICATION_ID=$GRAPHAPI_APPLICATION_ID \
+            -e GRAPHAPI_TENANT_ID=$GRAPHAPI_TENANT_ID \
+            -e GRAPHAPI_SECRET_VALUE=$GRAPHAPI_SECRET_VALUE \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+            dbtools-airflow \
+            ./.local/bin/pytest tests/test_sharepoint.py \
+            -s -vvv -ra --showlocals --tb=long --disable-warnings
+        env:
+          GRAPHAPI_APPLICATION_ID: ${{ secrets.GRAPHAPI_APPLICATION_ID }}
+          GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
+          GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    # Deploy to test if not on master
-    - name: Deploy test ECR
-      if: github.ref != 'refs/heads/master'
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
-      run: |
-        docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:latest
-        docker push $ECR_TEST_REPOSITORY_URL:latest
+      # Deploy to test if not on master
+      - name: Deploy test ECR
+        if: github.ref != 'refs/heads/master'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
+        run: |
+          docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:latest
+          docker push $ECR_TEST_REPOSITORY_URL:latest
 
-    # Deploy to prod  on master
-    - name: Deploy prod ECR
-      if: github.ref == 'refs/heads/master'
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-      run: |
-        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
-        docker push $ECR_REPOSITORY_URL:latest
+      # Deploy to prod  on master
+      - name: Deploy prod ECR
+        if: github.ref == 'refs/heads/master'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+        run: |
+          docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:latest
+          docker push $ECR_REPOSITORY_URL:latest
