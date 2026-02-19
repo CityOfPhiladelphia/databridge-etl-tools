@@ -3,7 +3,7 @@ name: Build, test, and deploy docker image to Prod ECR (master commit)
 on:
   push:
     branches:
-      - 'master'
+      - "master"
 
 concurrency:
   group: testing_environment
@@ -16,70 +16,69 @@ jobs:
     runs-on: self-hosted
 
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    # This is a github function? Ref doc: https://github.com/actions/checkout#checkout-a-different-branch
-    # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
-    # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
-    - uses: actions/checkout@v3
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      # This is a github function? Ref doc: https://github.com/actions/checkout#checkout-a-different-branch
+      # IMPORTANT NOTE: pinned to v3 instead of master, because v4 uses node20 and glibc 2.27. Amazon linux 2 atm only supports
+      # glibc 2.26. Change notes: https://github.com/marketplace/actions/checkout
+      - uses: actions/checkout@v3
 
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@main
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@main
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-    # Prune docker system to clear space
-    - name: docker system purne
-      run: |
-         yes | docker system prune
-         
-    # Build our docker container and insert our AWS secret keys
-    # no-cache so we're sure we're getting all changes (such as geopetl changes)
-    # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
-    - name: Build 312 docker container
-      run: |
-         docker build -t dbtools-312 \
-         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-         --no-cache \
-         -f Dockerfile-312 .
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      # Also build an airflow version
-    - name: Build Airflow docker container
-      run: |
-         docker build -t dbtools-airflow \
-         --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-         --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-         --no-cache \
-         -f Dockerfile-airflow .
-      env: 
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        
-    # Have to do a special entrypoint for the airflow image.
-    - name: Airflow postgres pytests
-      run: |
+      # Prune docker system to clear space
+      - name: docker system purne
+        run: |
+          yes | docker system prune
+
+      # Build our docker container and insert our AWS secret keys
+      # no-cache so we're sure we're getting all changes (such as geopetl changes)
+      # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
+      - name: Build 312 docker container
+        run: |
+          docker build -t dbtools-312 \
+          --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+          --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+          --no-cache \
+          -f Dockerfile-312 .
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        # Also build an airflow version
+      - name: Build Airflow docker container
+        run: |
+          docker build -t dbtools-airflow \
+          --no-cache \
+          -f Dockerfile-airflow .
+
+      # Have to do a special entrypoint for the airflow image.
+      - name: Airflow postgres pytests
+        run: |
           docker run --entrypoint python --rm \
             -e DB_USER=$POSTGRES_USER \
             -e DB_HOST=$POSTGRES_HOST \
             -e DB_PASSWORD=$POSTGRES_PASSWORD \
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
+            -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
             dbtools-airflow \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    - name: Python 312 postgres pytests
-      run: |
+      - name: Python 312 postgres pytests
+        run: |
           docker run --rm \
             -e DB_USER=$POSTGRES_USER \
             -e DB_HOST=$POSTGRES_HOST \
@@ -89,32 +88,31 @@ jobs:
             dbtools-312 \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
-      env:
-        POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-        POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-  
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
 
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
-    - name: Docker Push 312 to ProdECR
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-      run: |
-        docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
-        docker push $ECR_REPOSITORY_URL:latest
+      - name: Docker Push 312 to ProdECR
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+        run: |
+          docker tag dbtools-312:latest $ECR_REPOSITORY_URL:latest
+          docker push $ECR_REPOSITORY_URL:latest
 
-    - name: Docker Push airflow to Prod ECR
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
-      run: |
-        docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
-        docker push $ECR_REPOSITORY_URL:airflow-latest
+      - name: Docker Push airflow to Prod ECR
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
+        run: |
+          docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
+          docker push $ECR_REPOSITORY_URL:airflow-latest
