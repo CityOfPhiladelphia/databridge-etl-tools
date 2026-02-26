@@ -335,6 +335,8 @@ class Postgres():
                 diff2 = csv_header_set - schema_field_set
                 diff_join = diff.union(diff2)
                 if diff_join and (diff_join != set({'objectid', 'gdb_geomattr_data'}) and diff_join != set({'gdb_geomattr_data'})):
+                    print('S3 Json: ', schema_field_set)
+                    print('CSV: ', csv_header_set)
                     raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
 
                 # If objectid is missing from JSON schema but present in CSV header, add it
