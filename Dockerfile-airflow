@@ -30,4 +30,4 @@ COPY --chown=airflow:airflow tests/ ./tests/
 RUN python -m compileall ./databridge_etl_tools
 
 # Install databridge-etl-tools using pyproject.toml
-RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" "apache-airflow-providers-amazon[s3fs]".
+RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" "apache-airflow-providers-amazon[s3fs]" .
