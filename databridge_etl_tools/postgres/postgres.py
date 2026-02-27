@@ -49,6 +49,11 @@ class Postgres():
             if self.s3_key is None and self.s3_bucket is None 
             else None
         )
+        self.local_json_schema_path = (
+            kwargs.get("local_json_schema_path")
+            if self.s3_key is None and self.s3_bucket is None 
+            else None
+        )
         self.geom_field = kwargs.get('geom_field', None)
         self.geom_type = kwargs.get('geom_type', None)
         self.with_srid = kwargs.get('with_srid', None)
