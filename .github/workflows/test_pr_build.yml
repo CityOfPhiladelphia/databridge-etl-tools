@@ -13,7 +13,7 @@ jobs:
   build:
     strategy:
       matrix:
-        dockerfile_prefix: [311,312,313,airflow]
+        dockerfile_prefix: [312,313]
     name: Build, test, push to Test ECR
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: self-hosted
@@ -108,7 +108,6 @@ jobs:
         GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
         GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
 
-    # Push to testing repository
     # https://github.com/aws-actions/amazon-ecr-login
     - name: Login to Amazon ECR
       id: login-ecr
