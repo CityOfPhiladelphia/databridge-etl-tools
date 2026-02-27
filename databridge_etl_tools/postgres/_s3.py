@@ -1,4 +1,5 @@
 import boto3
+import os
 
 def _interact_with_s3(self, method: str, path: str, s3_key: str): 
     '''
@@ -24,7 +25,11 @@ def load_json_schema_to_s3(self):
     with open(self.json_schema_path, 'w') as f:
         f.write(self.export_json_schema)
     
-    _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
+    if not self.local_json_schema_path:
+        _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
+    else:
+        os.popen(f'cp {self.json_schema_path} {self.local_json_schema_path}') 
+        print(f'Saved json schema to {self.local_json_schema_path}')
 
 def load_csv_to_s3(self, path):
     '''Path of file to load - generally should be self.csv_path'''

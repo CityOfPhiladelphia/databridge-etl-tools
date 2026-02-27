@@ -14,6 +14,7 @@ import click
 @click.option('--s3_bucket', required=False)
 @click.option('--s3_key', required=False)
 @click.option('--local_csv_path', default='/tmp/output.csv', required=False)
+@click.option('--local_json_schema_path', default='/tmp/output.json', required=False)
 @click.option('--index_fields', required=False, default=None, help='Optionally specify the fields to index')
 def postgres(ctx, **kwargs):
     '''Run ETL commands for Postgres'''
