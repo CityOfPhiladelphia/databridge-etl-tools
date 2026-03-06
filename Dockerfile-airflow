@@ -30,7 +30,7 @@ COPY --chown=airflow:airflow tests/ ./tests/
 RUN python -m compileall ./databridge_etl_tools
 
 # Dedicated sandbox for Openmetadata library
-RUN python -m venv /opt/om_venv && \
+RUN python -m venv /home/airflow/venvs/om && \
     /opt/om_venv/bin/pip install "openmetadata-ingestion==1.11.12"
 
 # Install databridge-etl-tools using pyproject.toml
