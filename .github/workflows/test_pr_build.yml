@@ -11,9 +11,6 @@ concurrency:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        dockerfile_prefix: [312,313]
     name: Build, test, push to Test ECR
     if: "!contains(github.event.head_commit.message, 'skip ci')"
     runs-on: self-hosted
@@ -43,11 +40,11 @@ jobs:
     # NOTE: right now just build and test python 3.12 for prod deployment, but we have 3.11 and 3.13 Dockerfiles too.
     - name: Build docker container
       run: |
-         docker build -t dbtools-${{ matrix.dockerfile_prefix }} \
+         docker build -t dbtools-312 \
          --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
          --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
          --no-cache \
-         -f Dockerfile-${{ matrix.dockerfile_prefix }} .
+         -f Dockerfile-312 .
       env: 
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -61,7 +58,7 @@ jobs:
             -e DB_PASSWORD=$POSTGRES_PASSWORD \
             -e DB_HOST=$POSTGRES_HOST \
             -e DATABASE=$POSTGRES_DB \
-            dbtools-${{ matrix.dockerfile_prefix }} \
+            dbtools-312 \
             ./.local/bin/pytest tests/test_postgres.py \
             -vvv -ra --showlocals --tb=long --disable-warnings
       env:
@@ -75,7 +72,7 @@ jobs:
           docker run --entrypoint python --rm \
             -e AGO_USER=$AGO_USER \
             -e AGO_PASSWORD=$AGO_PASSWORD \
-             dbtools-${{ matrix.dockerfile_prefix }} \
+             dbtools-312 \
             ./.local/bin/pytest tests/test_ago.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
       env:
@@ -87,7 +84,7 @@ jobs:
           docker run --entrypoint python --rm \
             -e CARTO_USER=$CARTO_USER \
             -e CARTO_PASSWORD=$CARTO_PASSWORD \
-            dbtools-${{ matrix.dockerfile_prefix }} \
+            dbtools-312 \
             ./.local/bin/pytest tests/test_carto.py \
             -s -vvv -ra --showlocals --tb=long --disable-warnings
       env:
@@ -100,7 +97,7 @@ jobs:
           -e GRAPHAPI_APPLICATION_ID=$GRAPHAPI_APPLICATION_ID \
           -e GRAPHAPI_TENANT_ID=$GRAPHAPI_TENANT_ID \
           -e GRAPHAPI_SECRET_VALUE=$GRAPHAPI_SECRET_VALUE \
-          dbtools-${{ matrix.dockerfile_prefix }} \
+          dbtools-312 \
           ./.local/bin/pytest tests/test_sharepoint.py \
           -s -vvv -ra --showlocals --tb=long --disable-warnings
       env: 
@@ -119,9 +116,5 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
       run: |
-        if [ "${{ matrix.dockerfile_prefix }}" == "312" ]; then
           docker tag dbtools-312:latest $ECR_TEST_REPOSITORY_URL:latest
           docker push $ECR_TEST_REPOSITORY_URL:latest
-        else
-          echo "This step only for pushing 312 to ECR for Airflow."
-        fi
