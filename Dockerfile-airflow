@@ -30,6 +30,6 @@ COPY --chown=airflow:airflow tests/ ./tests/
 RUN python -m compileall ./databridge_etl_tools
 
 # Install databridge-etl-tools using pyproject.toml
-RUN pip install --no-cache-dir "apache-airflow==3.1.7" \
+RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   "apache-airflow-providers-amazon[s3fs]" "openmetadata-ingestion==1.11.12" \
-  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.1.7/constraints-3.10.txt" .
+  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt" .
