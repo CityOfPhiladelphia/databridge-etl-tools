@@ -1,4 +1,4 @@
-FROM apache/airflow:3.1.7
+FROM apache/airflow:3.1.7-python3.12
 # See https://airflow.apache.org/docs/docker-stack/build.html
 USER root
 
@@ -32,4 +32,4 @@ RUN python -m compileall ./databridge_etl_tools
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   "apache-airflow-providers-amazon[s3fs]" "openmetadata-ingestion==1.11.12" \
-  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt" .
+  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt" .
