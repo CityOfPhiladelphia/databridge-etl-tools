@@ -29,7 +29,11 @@ COPY --chown=airflow:airflow tests/ ./tests/
 # Python syntax check
 RUN python -m compileall ./databridge_etl_tools
 
+# Dedicated sandbox for Openmetadata library
+RUN python -m venv /opt/om_venv && \
+    /opt/om_venv/bin/pip install "openmetadata-ingestion==1.11.12"
+
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
-  "apache-airflow-providers-amazon[s3fs]" "openmetadata-ingestion==1.11.12" \
-  --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt" .
+  "apache-airflow-providers-amazon[s3fs]" .
+  # --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt" .
