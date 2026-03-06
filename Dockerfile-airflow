@@ -31,7 +31,7 @@ RUN python -m compileall ./databridge_etl_tools
 
 # Dedicated sandbox for Openmetadata library
 RUN python -m venv /home/airflow/venvs/om && \
-    /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.11.12" "apache-airflow-task-sdk=1.1.7"
+    /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.11.12" "apache-airflow-task-sdk==1.1.7"
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
