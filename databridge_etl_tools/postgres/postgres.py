@@ -93,10 +93,8 @@ class Postgres():
         ```
         '''
         if type == None: # No exception was raised before __exit__()
-            try: 
-                self.get_row_count()   
+            try:
                 self.conn.commit()
-                self.vacuum_analyze()
                 self.logger.info('Done! All transactions committed.\n')
             except Exception as e:
                 self.logger.error('Workflow failed... rolling back database transactions.\n')
@@ -757,6 +755,7 @@ class Postgres():
                        schema_name=self.table_schema, mapping_dict=mapping_dict)
 
         self.create_indexes()
+        self.vacuum_analyze()
 
     def _delete_using_except(self, staging, mapping_dict:dict): 
         '''Run a query to delete the rows from a table that do not appear in another 
