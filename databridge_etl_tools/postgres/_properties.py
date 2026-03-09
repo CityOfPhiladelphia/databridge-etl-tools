@@ -95,6 +95,13 @@ def export_json_schema(self):
             results = self.execute_sql(stmt, data=[self.table_name, self.table_schema], fetch='one')
             if results:
                 srid = results[0]
+            if not srid:
+                # Fall back to determining srid manually if table wasn't made correctly.
+                stmt = f'select st_srid({self.geom_field}) from {self.table_schema}.{self.table_name} where {self.geom_field} is not null limit 1;'
+                results = self.execute_sql(stmt, fetch='one')
+                if results:
+                    srid = results[0]
+
             assert srid
 
             if self.geom_type.lower() == 'multipolygon' or self.geom_type.lower() == 'polygon':
