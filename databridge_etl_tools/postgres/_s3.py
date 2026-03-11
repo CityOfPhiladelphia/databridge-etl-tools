@@ -1,4 +1,5 @@
 import boto3
+from shutil import copyfile
 import os
 
 def _interact_with_s3(self, method: str, path: str, s3_key: str): 
@@ -28,7 +29,8 @@ def load_json_schema_to_s3(self):
     if not self.local_json_schema_path:
         _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
     else:
-        os.popen(f'cp {self.json_schema_path} {self.local_json_schema_path}') 
+        if self.json_schema_path != self.local_json_schema_path:
+            copyfile(self.json_schema_path, self.local_json_schema_path)
         print(f'Saved json schema to {self.local_json_schema_path}')
 
 def load_csv_to_s3(self, path):
