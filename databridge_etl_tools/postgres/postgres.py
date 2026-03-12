@@ -44,16 +44,19 @@ class Postgres():
         self.temp_table_name = self.table_name + '_t'
         self.s3_bucket = kwargs.get('s3_bucket', None)
         self.s3_key = kwargs.get('s3_key', None)
-        self.local_csv_path = (
-            kwargs.get("local_csv_path")
-            if self.s3_key is None and self.s3_bucket is None 
-            else None
-        )
-        self.local_json_schema_path = (
-            kwargs.get("local_json_schema_path")
-            if self.s3_key is None and self.s3_bucket is None 
-            else None
-        )
+        
+        self.local_csv_path = kwargs.get("local_csv_path", None)
+        # Only create a default value if we're not doing anything with s3
+        if not self.s3_bucket and not self.s3_key:
+            if self.local_csv_path is None:
+                self.local_csv_path = f'/tmp/{self.table_schema}__{self.table_name}.csv'
+
+        self.local_json_schema_path = kwargs.get("local_json_schema_path", None)
+        # Only create a default value if we're not doing anything with s3
+        if not self.s3_bucket and not self.s3_key:
+            if self.local_json_schema_path is None:
+                self.local_json_schema_path = f'/tmp/{self.table_schema}__{self.table_name}.json'
+
         self.geom_field = kwargs.get('geom_field', None)
         self.geom_type = kwargs.get('geom_type', None)
         self.with_srid = kwargs.get('with_srid', None)
