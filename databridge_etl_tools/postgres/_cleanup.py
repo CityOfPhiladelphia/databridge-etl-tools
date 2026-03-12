@@ -17,7 +17,13 @@ def vacuum_analyze(self):
 def cleanup(self):
     '''Remove local CSV, temp CSV, JSON schema'''
     self.logger.info('Attempting to drop temp files...')
-    for f in [self.csv_path, self.temp_csv_path, self.json_schema_path]:
+    to_drop = [self.csv_path, self.temp_csv_path]
+    # Don't clean up if we specifically want to keep them.
+    if self.local_json_schema_path is None:
+        to_drop.append(self.json_schema_path)
+    if self.local_csv_path is None:
+        to_drop.append(self.csv_path)
+    for f in to_drop:
         if f is not None:
             if os.path.isfile(f):
                 try:
