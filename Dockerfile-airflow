@@ -32,7 +32,7 @@ RUN python -m compileall ./databridge_etl_tools
 
 # Dedicated sandbox for Openmetadata library
 RUN python -m venv /home/airflow/venvs/om && \
-    /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.12.1" "cachetools" "pendulum" "arcgis"
+    /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.12.1" "cachetools" "pendulum"
 
 # Dedicated sandbox for ArcGIS library
 RUN python -m venv /home/airflow/venvs/arcgis && \
