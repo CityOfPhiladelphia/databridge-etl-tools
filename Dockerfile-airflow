@@ -15,6 +15,7 @@ RUN apt-get update && \
     lsb-release \
     wget \
     unzip \
+    libkrb5-dev \
   && apt-get autoremove -yqq --purge \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
@@ -32,6 +33,10 @@ RUN python -m compileall ./databridge_etl_tools
 # Dedicated sandbox for Openmetadata library
 RUN python -m venv /home/airflow/venvs/om && \
     /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.12.1" "cachetools" "pendulum"
+
+# Dedicated sandbox for ArcGIS library
+RUN python -m venv /home/airflow/venvs/arcgis && \
+    /home/airflow/venvs/arcgis/bin/pip install "pendulum" "arcgis"
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
