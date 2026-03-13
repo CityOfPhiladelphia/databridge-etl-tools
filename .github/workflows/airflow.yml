@@ -3,7 +3,7 @@ name: Build, test, and deploy Airflow docker image to Test or PROD ECR
 on:
   push:
     branches:
-      - main
+      - master
   pull_request: {}
 
 jobs:
