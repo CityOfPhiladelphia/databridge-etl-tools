@@ -34,6 +34,10 @@ RUN python -m compileall ./databridge_etl_tools
 RUN python -m venv /home/airflow/venvs/om && \
     /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.12.1" "cachetools" "pendulum" "arcgis"
 
+# Dedicated sandbox for ArcGIS library
+RUN python -m venv /home/airflow/venvs/arcgis && \
+    /home/airflow/venvs/om/bin/pip install "pendulum" "arcgis"
+
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   "apache-airflow-providers-amazon[s3fs]" .
