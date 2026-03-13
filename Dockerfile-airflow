@@ -36,7 +36,7 @@ RUN python -m venv /home/airflow/venvs/om && \
 
 # Dedicated sandbox for ArcGIS library
 RUN python -m venv /home/airflow/venvs/arcgis && \
-    /home/airflow/venvs/om/bin/pip install "pendulum" "arcgis" "arcgis-mapping"
+    /home/airflow/venvs/arcgis/bin/pip install "pendulum" "arcgis"
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
