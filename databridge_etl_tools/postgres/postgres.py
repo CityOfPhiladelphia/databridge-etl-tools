@@ -754,6 +754,9 @@ class Postgres():
         self.write_csv(write_file=self.temp_csv_path, table_name=self.table_name, 
                        schema_name=self.table_schema, mapping_dict=mapping_dict)
 
+        # A commit is apparently necessary here to finish, even though we have a commit in the exit function
+        self.conn.commit()
+
         self.create_indexes()
         self.vacuum_analyze()
 
