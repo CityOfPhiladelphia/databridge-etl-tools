@@ -25,7 +25,7 @@ class Postgres():
     '''
 
     from ._properties import (
-        csv_path, temp_csv_path, json_schema_path, json_schema_s3_key, 
+        csv_path, temp_csv_path, json_schema_path, json_schema_s3_key, new_json_schema_s3_key, 
         export_json_schema, primary_keys, pk_constraint_name, table_self_identifier, 
         fields, fields_and_types, geom_field, geom_type, database_object_type)
     from ._s3 import (get_csv_from_s3, get_json_schema_from_s3, load_csv_to_s3, 
@@ -44,6 +44,7 @@ class Postgres():
         self.temp_table_name = self.table_name + '_t'
         self.s3_bucket = kwargs.get('s3_bucket', None)
         self.s3_key = kwargs.get('s3_key', None)
+        self.old_carto_format = kwargs.get('old_carto_format', False)
         
         self.local_csv_path = kwargs.get("local_csv_path", None)
         # Only create a default value if we're not doing anything with s3
@@ -68,7 +69,9 @@ class Postgres():
         )
 
         self._json_schema_s3_key = kwargs.get('json_schema_s3_key', None)
+        self._new_json_schema_s3_key = kwargs.get('new_json_schema_s3_key', None)
         self._schema = None
+        self._new_schema = None
         self._export_json_schema = None
         self._primary_keys = None
         self._pk_constraint_name = None
@@ -189,22 +192,6 @@ class Postgres():
         print('\nSuccess!')
 
 
-    def get_json_schema_from_s3(self):
-        self.logger.info('Fetching json schema: s3://{}/{}'.format(self.s3_bucket, self.json_schema_s3_key))
-
-        s3 = boto3.resource('s3')
-        try:
-            s3.Object(self.s3_bucket, self.json_schema_s3_key).download_file(self.json_schema_path)
-        except Exception as e:
-            if 'HeadObject operation: Not Found' in str(e):
-                msg = f'Json schema file does not exist in S3! Please use databridge-etl-tools "extract-json-schema" command and place the file here: s3:/{self.s3_bucket}/{self.json_schema_s3_key}'
-                msg += '\n Command form would be: databridge_etl_tools postgres --table_name={table_name} --table_schema={table_schema} --connection_string=postgresql://postgres:{password}@{host}:5432/databridge --s3_bucket={s3_bucket} --s3_key=staging/{table_shema}/{table_name} extract-json-schema'
-                raise AssertionError(msg)
-            else:
-                raise e
-
-        self.logger.info('Json schema successfully downloaded.\n'.format(self.s3_bucket, self.json_schema_s3_key))
-
     def schema_from_s3(self):
         if self._schema is None:
             self.get_json_schema_from_s3()
@@ -215,6 +202,33 @@ class Postgres():
                     self.logger.error('Json schema malformatted...')
                 self._schema = schema
         return self._schema
+
+    def new_schema_from_s3(self, json_s3_key=None):
+        '''new function to also grab a json schema that is purely a postgresql definition
+        unlike the old bad one that is used for old carto and doesn't have the real postgresql types.
+        But we need both json files existing simultaneously so here we are.'''
+        if self._new_schema is None:
+            if not json_s3_key:
+                json_s3_key = self.json_schema_s3_key
+            self.logger.info('Fetching json schema: s3://{}/{}'.format(self.s3_bucket, json_s3_key))
+
+            s3 = boto3.resource('s3')
+            try:
+                s3.Object(self.s3_bucket, json_s3_key).download_file(self.json_schema_path)
+            except Exception as e:
+                if 'HeadObject operation: Not Found' in str(e):
+                    msg = f'Json schema file does not exist in S3! Please use databridge-etl-tools "extract-json-schema" command and place the file here: s3:/{self.s3_bucket}/{json_s3_key}'
+                    msg += '\n Command form would be: databridge_etl_tools postgres --table_name={table_name} --table_schema={table_schema} --connection_string=postgresql://postgres:{password}@{host}:5432/databridge --s3_bucket={s3_bucket} --s3_key=staging/{table_shema}/{table_name} extract-json-schema'
+                    raise AssertionError(msg)
+                else:
+                    raise e
+
+            with open(self.json_schema_path) as json_file:
+                schema = json.load(json_file).get('fields', '')
+                if not schema:
+                    self.logger.error('Json schema malformatted...')
+                self._new_schema = schema
+        return self._new_schema
 
     def get_csv(self):
         '''
@@ -317,85 +331,74 @@ class Postgres():
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
 
-    def create_table(self, file:str):
+
+    def create_table(self):
         with self.conn.cursor() as cursor:
-            if not self.check_exists(self.table_name, self.table_schema):
-                # First pull in only the header from the CSV to get column names
-                try:
-                    rows = etl.fromcsv(file, encoding='utf-8')
-                except UnicodeError:    
-                    self.logger.info("Exception encountered trying to load rows with utf-8 encoding, trying latin-1...")
-                    rows = etl.fromcsv(file, encoding='latin-1')
-                header = etl.header(rows)
-                str_header = ', '.join(header)
-                    
-                # pull in schema to create table
-                schema  = self.schema_from_s3()
-                # Create our table creation statement from the downloaded schema.
-                create_ddl = f'CREATE TABLE {self.fully_qualified_table_name} ('
+            # pull in schema to create table
+            schema  = self.new_schema_from_s3(json_s3_key=self.new_json_schema_s3_key)
+            recreate_table = False
+            # Compare if table exists so we know to remake 
+            if self.check_exists(self.table_name, self.table_schema):
+                schema_field_dict = {s['name']: s['type'] for s in schema}
+                # Fields and types are a tuple, convert to dictionary for accurate comparison
+                database_field_dict = {f[0]: f[1] for f in self.fields_and_types}
 
-                # First assert the CSV header matches the schema fields. Sometimes "objectid" is excluded.
-                csv_header_set = set([h.strip().lower() for h in str_header.split(',')])
-                schema_field_set = set([s['name'].strip().lower() for s in schema])
-                diff = schema_field_set - csv_header_set
-                diff2 = csv_header_set - schema_field_set
-                diff_join = diff.union(diff2)
+                # convert 'text' to 'character varying' for proper comparison
+                database_field_dict = {k: ('character varying' if v == 'text' else v) for k, v in database_field_dict.items()}
+                schema_field_dict = {k: ('character varying' if v == 'text' else v) for k, v in schema_field_dict.items()}
+
+
+                diff1 = schema_field_dict.items() - database_field_dict.items()
+                diff2 = database_field_dict.items() - schema_field_dict.items()
+                diff_join = set(diff1).union(set(diff2))
                 if diff_join and (diff_join != set({'objectid', 'gdb_geomattr_data'}) and diff_join != set({'gdb_geomattr_data'})):
-                    print('S3 Json: ', schema_field_set)
-                    print('CSV: ', csv_header_set)
-                    raise AssertionError(f'CSV header fields do not match schema fields! Difference: {diff_join}')
+                    print('S3 Json: ', schema_field_dict)
+                    print('DB: ', database_field_dict)
+                    print(f'DB fields do not match json schema fields! Difference: {diff_join}')
+                    recreate_table = True
 
-                # If objectid is missing from JSON schema but present in CSV header, add it
-                if 'objectid' in diff_join and 'objectid' not in schema_field_set:
-                    schema.insert(0, {'name': 'objectid', 'type': 'numeric'})
-                    pass
+            # Drop table if we found a difference.
+            if recreate_table:
+                drop_stmt = f'DROP TABLE {self.fully_qualified_table_name};'
+                self.logger.info(f'Dropping table with statement:\n{drop_stmt}\n')
+                cursor.execute(drop_stmt)
+                
+            # Create our table creation statement from the downloaded schema.
+            create_ddl = f'CREATE TABLE {self.fully_qualified_table_name} ('
 
-                # Find geomtry field from csv. Will have our spatial index be properly made on a first table create run.
-                # Force set self.geom_field if we find it.
-                if self.geom_field is None:
-                    for s in schema:
-                        print(s)
-                        if s['type'] == 'geometry':
-                            self._geom_field = s['name']
-                            self.logger.info(f'Detected geometry field from json schema: {self.geom_field}\n')
-                            break
+            # Find geomtry field from schema. Will have our spatial index be properly made on a first table create run.
+            # Force set self.geom_field if we find it.
+            if self.geom_field is None:
+                for s in schema:
+                    print(s)
+                    if s['type'] == 'geometry':
+                        self._geom_field = s['name']
+                        self.logger.info(f'Detected geometry field from json schema: {self.geom_field}\n')
+                        break
 
-                # Gather columns and types from json schema
-                for i, scheme in enumerate(schema):
-                    col = ''
+            # Gather columns and types from json schema
+            for i, scheme in enumerate(schema):
+                col = ''
 
-                    # for new carto platform which is just postgres, translate old carto data types to just postgres types
-                    if scheme["type"] == 'datetime':
-                        scheme["type"] = 'timestamp without time zone'
-                    if scheme["type"] == 'number':
-                        scheme["type"] = 'numeric'
-                    # array type to text array: https://www.postgresql.org/docs/current/arrays.html
-                    if scheme["type"] == 'array':
-                        scheme["type"] = 'text[]'
-                    if scheme["type"] == 'string':
-                        scheme["type"] = 'text'
-                    if scheme["type"] == 'object':
-                        scheme["type"] = 'text'
+                if scheme['type'] == 'geometry':
+                    col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
+                else:
+                    col = f'{scheme["name"]} {scheme["type"]}'
 
-                    if scheme['type'] == 'geometry':
-                        col = f'{scheme["name"]} public.geometry({scheme["geometry_type"]}, {scheme["srid"]})'
+                if 'constraints' in scheme.keys():
+                    if 'required' in scheme['constraints'].keys() and scheme['constraints']['required'] == True:
+                        col += ' NOT NULL'
                     else:
-                        col = f'{scheme["name"]} {scheme["type"]}'
-
-                    if 'constraints' in scheme.keys():
-                        if 'required' in scheme['constraints'].keys() and scheme['constraints']['required'] == True:
-                            col += ' NOT NULL'
-                        else:
-                            col += ' NULL'
-                    if col:
-                        create_ddl += col
-                        create_ddl += ', '
-                # Remove last comma/space
-                create_ddl = create_ddl[:-2]
-                create_ddl += ')'
-                self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
-                cursor.execute(create_ddl)
-                cursor.execute(f'COMMIT;')
+                        col += ' NULL'
+                if col:
+                    create_ddl += col
+                    create_ddl += ', '
+            # Remove last comma/space
+            create_ddl = create_ddl[:-2]
+            create_ddl += ')'
+            self.logger.info(f'Creating table with DDL:\n{create_ddl}\n')
+            cursor.execute(create_ddl)
+            cursor.execute(f'COMMIT;')
 
 
     def _is_registered(self) -> bool:
@@ -746,7 +749,7 @@ class Postgres():
         self.get_csv()
 
         if create_table:
-            self.create_table(file=self.csv_path)
+            self.create_table()
 
         assert self.check_exists(self.table_name, self.table_schema), f'Error! Table {self.fully_qualified_table_name} does not exist in database.'
 
