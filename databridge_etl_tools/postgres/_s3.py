@@ -17,20 +17,22 @@ def _interact_with_s3(self, method: str, path: str, s3_key: str):
         self.logger.info(f'File successfully uploaded from {path} to S3\n')
 
 def get_json_schema_from_s3(self):
+    print(f'Getting json schema from S3 {self.json_schema_s3_key} and saving to {self.json_schema_path}...')
     _interact_with_s3(self, 'get', self.json_schema_path, self.json_schema_s3_key)
 
 def get_csv_from_s3(self):
+    print(f'Getting CSV from S3 {self.s3_key} and saving to {self.csv_path}...')
     _interact_with_s3(self, 'get', self.csv_path, self.s3_key)
 
 def load_json_schema_to_s3(self):
     with open(self.json_schema_path, 'w') as f:
         f.write(self.export_json_schema)
     
-    if not self.local_json_schema_path:
+    if self.s3_bucket and self.s3_key:
         _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
-    else:
-        if self.json_schema_path != self.local_json_schema_path:
-            copyfile(self.json_schema_path, self.local_json_schema_path)
+
+    if self.local_json_schema_path != self.json_schema_path and self.local_json_schema_path is not None:
+        copyfile(self.json_schema_path, self.local_json_schema_path)
         print(f'Saved json schema to {self.local_json_schema_path}')
 
 def load_csv_to_s3(self, path):
