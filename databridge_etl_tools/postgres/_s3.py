@@ -27,9 +27,13 @@ def get_csv_from_s3(self):
 def load_json_schema_to_s3(self):
     with open(self.json_schema_path, 'w') as f:
         f.write(self.export_json_schema)
-    
+
     if self.s3_bucket and self.s3_key:
-        _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
+        # Don't overwrite old schemas so old carto uploads keep working.
+        if self.old_carto_format:
+            _interact_with_s3(self, 'load', self.json_schema_path, self.json_schema_s3_key)
+        else:
+            _interact_with_s3(self, 'load', self.json_schema_path, self.new_json_schema_s3_key)
 
     if self.local_json_schema_path != self.json_schema_path and self.local_json_schema_path is not None:
         copyfile(self.json_schema_path, self.local_json_schema_path)

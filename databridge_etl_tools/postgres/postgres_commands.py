@@ -40,9 +40,10 @@ def extract(ctx, **kwargs):
 
 @postgres.command()
 @click.pass_context
-def extract_json_schema(ctx):
+@click.option('--old_carto_format', default=False, required=False, help='''Whether the made json schema will be in the old format with abtract data types for old carto v2''')
+def extract_json_schema(ctx, **kwargs):
     """Extracts a dataset's schema in Postgres into a JSON file in S3"""
-    with Postgres(**ctx.obj) as postgres: 
+    with Postgres(**ctx.obj, **kwargs) as postgres: 
         postgres.load_json_schema_to_s3()
     
 @postgres.command()

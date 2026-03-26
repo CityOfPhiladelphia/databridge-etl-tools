@@ -1,7 +1,6 @@
 import os
 import json
 import psycopg2.sql as sql
-from .postgres_map import DATA_TYPE_MAP, GEOM_TYPE_MAP
 
 
 @property
@@ -31,6 +30,18 @@ def json_schema_s3_key(self):
             .replace('staging', 'schemas')
             .replace('.csv', '.json'))
     return self._json_schema_s3_key
+
+
+# Schema file that is newer and has proper postgresql data types.
+@property
+def new_json_schema_s3_key(self):
+    # This expects the schema to be in a subfolder on S3
+    if not self._new_json_schema_s3_key: 
+        self._new_json_schema_s3_key = (self.s3_key
+            .replace('staging/', 'schemas/')
+            .replace('.json', '_new.json')
+            .replace('.csv', '_new.json'))
+    return self._new_json_schema_s3_key
 
 @property
 def json_schema_path(self):
@@ -104,11 +115,32 @@ def export_json_schema(self):
 
             assert srid
 
-            if self.geom_type.lower() == 'multipolygon' or self.geom_type.lower() == 'polygon':
-                # not sure why, but polygons have to be a generic "geometry" to work in carto.
-                geom_type = 'geometry'
+            if self.old_carto_format:
+                # Carto v2 doesn't recognize multipolygons, so we have to set the geom type to "geometry" if it's a multipolygon or polygon.
+                if self.geom_type.lower() == 'multipolygon' or self.geom_type.lower() == 'polygon':
+                    # not sure why, but polygons have to be a generic "geometry" to work in carto.
+                    geom_type = 'geometry'
             else:
                 geom_type = self.geom_type.lower()
+
+
+            # Fix for when we get bullshit geometry type.
+            if geom_type.lower() == 'point linestring polygon multipoint multilinestring multipolygon':
+                self.logger.info(f'Detected bullshit geometry type in json schema for field {field["name"]}, attempting to fix...')
+                get_geom_type_stmt = f'''
+                SELECT DISTINCT GeometryType({self.geom_field}) FROM {self.table_schema}.{self.table_name} WHERE {self.geom_field} IS NOT NULL;
+                '''
+                results = self.execute_sql(get_geom_type_stmt, fetch='all')
+                geom_types = set([x[0].lower() for x in results])
+                if len(geom_types) == 1:
+                    geom_type = geom_types.pop()
+                # Usually we'll only have 2 types returned for distinct, default to multipolyon.
+                elif len(geom_types) == 2:
+                    if  'polygon' in geom_types and 'multipolygon' in geom_types:
+                        geom_type = 'multipolygon'
+                else:
+                    raise ValueError(f'Unexpected geometry types found: {geom_types}')
+
 
             # Properly format shape field
             for field in fields:
