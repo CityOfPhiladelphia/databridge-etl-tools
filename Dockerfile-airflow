@@ -40,5 +40,5 @@ RUN python -m venv /home/airflow/venvs/arcgis && \
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
-  "apache-airflow-providers-amazon[s3fs]" "networkx".
+  "apache-airflow-providers-amazon[s3fs]" "networkx" .
   # --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt" .
