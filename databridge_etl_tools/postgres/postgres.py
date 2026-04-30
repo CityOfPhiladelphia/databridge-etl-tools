@@ -467,18 +467,24 @@ class Postgres:
                     for k, v in schema_field_dict.items()
                 }
 
+                # subtract shape from diff comparison if they're present in both
+                # since their types might differ between like "USER-DEFINED" and "geometry".
+                if "shape" in schema_field_dict and "shape" in database_field_dict:
+                    del schema_field_dict["shape"]
+                    del database_field_dict["shape"]
+                # also remove gdb_geomattr_data if present because we handle it's existence elsewhere.
+                if "gdb_geomattr_data" in schema_field_dict:
+                    del schema_field_dict["gdb_geomattr_data"]
+                if "gdb_geomattr_data" in database_field_dict:
+                    del database_field_dict["gdb_geomattr_data"]
+
                 diff1 = schema_field_dict.items() - database_field_dict.items()
                 diff2 = database_field_dict.items() - schema_field_dict.items()
                 diff_join = set(diff1).union(set(diff2))
-                if diff_join and (
-                    diff_join != set({"objectid", "gdb_geomattr_data"})
-                    and diff_join != set({"gdb_geomattr_data"})
-                ):
+                if diff_join:
                     print("S3 Json: ", schema_field_dict)
                     print("DB: ", database_field_dict)
-                    print(
-                        f"DB fields do not match json schema fields! Difference: {diff_join}"
-                    )
+                    print(f"DB fields do not match json schema fields! Difference: {diff_join}")
                     recreate_table = True
 
             # Drop table if we found a difference.
