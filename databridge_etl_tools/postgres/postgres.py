@@ -446,7 +446,7 @@ class Postgres:
         write_file = self.temp_csv_path
         rows.tocsv(write_file)
 
-    def create_table(self):
+    def create_table(self, rename_replace=False):
         with self.conn.cursor() as cursor:
             # pull in schema to create table
             schema = self.new_schema_from_s3(json_s3_key=self.new_json_schema_s3_key)
@@ -487,8 +487,16 @@ class Postgres:
                     print(f"DB fields do not match json schema fields! Difference: {diff_join}")
                     recreate_table = True
 
-            # Drop table if we found a difference.
-            if recreate_table:
+            # Drop table if we found a difference of if we're doing a rename/replace.
+            if rename_replace:
+                # Make sure our temp table doesn't exist.
+                try:
+                    drop_stmt = f"DROP TABLE {self.fully_qualified_table_name}_temp;"
+                    self.logger.info(f"Dropping table with statement:\n{drop_stmt}\n")
+                    cursor.execute(drop_stmt)
+                except:
+                    cursor.execute("ROLLBACK;")
+            elif recreate_table:
                 drop_stmt = f"DROP TABLE {self.fully_qualified_table_name};"
                 self.logger.info(f"Dropping table with statement:\n{drop_stmt}\n")
                 cursor.execute(drop_stmt)
@@ -499,7 +507,10 @@ class Postgres:
                 or recreate_table
             ):
                 # Create our table creation statement from the downloaded schema.
-                create_ddl = f"CREATE TABLE {self.fully_qualified_table_name} ("
+                if rename_replace:
+                    create_ddl = f"CREATE TABLE {self.fully_qualified_table_name}_temp ("
+                else:
+                    create_ddl = f"CREATE TABLE {self.fully_qualified_table_name} ("
 
                 # Find geomtry field from schema. Will have our spatial index be properly made on a first table create run.
                 # Force set self.geom_field if we find it.
@@ -664,6 +675,7 @@ class Postgres:
         write_file: "str",
         table_name: "str",
         schema_name: "str",
+        rename_replace: bool = False,
         mapping_dict: dict = {},
         temp_table: bool = False,
     ):
@@ -686,6 +698,9 @@ class Postgres:
         if temp_table:  # temp_tables do not exist in a user-defined schema
             self.logger.info(f"Writing to TEMP table {table_name} from {write_file}...")
             table_identifier = sql.Identifier(table_name)
+        elif rename_replace:
+            self.logger.info(f"Writing to TEMP table {table_name}_temp from {write_file}...")
+            table_identifier = sql.Identifier(table_name + "_temp")
         else:
             self.logger.info(
                 f"Writing to table {schema_name}.{table_name} from {write_file}..."
@@ -723,6 +738,13 @@ class Postgres:
                 self.logger.info(
                     f"Postgres Write Successful: {cursor.rowcount:,} rows imported.\n"
                 )
+                if rename_replace:
+                    self.logger.info(f"Renaming {table_name} to {table_name}_old...")
+                    cursor.execute(f"ALTER TABLE {table_name} RENAME TO {table_name}_old;")
+                    # Now rename the temp table to the original name
+                    self.table_name = table_name
+                    cursor.execute(f"ALTER TABLE {table_name}_temp RENAME TO {table_name};")
+                    self.logger.info(f"New table name: {self.table_schema}.{self.table_name}\n")
 
         if self._is_registered():
             if self._registration_id:
@@ -944,6 +966,7 @@ class Postgres:
         column_mappings: str = None,
         mappings_file: str = None,
         truncate_before_load: bool = False,
+        rename_replace: bool = None,
         create_table: bool = False,
     ):
         """
@@ -969,7 +992,7 @@ class Postgres:
         self.get_csv()
 
         if create_table:
-            self.create_table()
+            self.create_table(rename_replace)
 
         assert self.check_exists(self.table_name, self.table_schema), (
             f"Error! Table {self.fully_qualified_table_name} does not exist in database."
@@ -979,17 +1002,22 @@ class Postgres:
         self.prepare_file(
             file=self.csv_path, mapping_dict=mapping_dict, create_table=create_table
         )
-        if truncate_before_load:
+        if truncate_before_load and not rename_replace:
             self.delete_from_truncate()
         self.write_csv(
             write_file=self.temp_csv_path,
             table_name=self.table_name,
             schema_name=self.table_schema,
+            rename_replace=rename_replace,
             mapping_dict=mapping_dict,
         )
 
         # A commit is apparently necessary here to finish, even though we have a commit in the exit function
         self.conn.commit()
+
+        # Finally if everything worked, drop the old table.
+        if rename_replace:
+            self.drop_table(self.table_schema, self.table_name + "_old")
 
         self.create_indexes()
         self.vacuum_analyze()

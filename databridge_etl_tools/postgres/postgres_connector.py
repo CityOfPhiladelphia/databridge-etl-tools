@@ -2,9 +2,9 @@ import sys
 import logging
 import psycopg2
 
-class Postgres_Connector(): 
+class Postgres_Connector():
     '''Represent a Postgres connection. Do not remove **kwargs from class.'''
-    def __init__(self, connection_string, **kwargs): 
+    def __init__(self, connection_string, **kwargs):
         self.connection_string = connection_string
         self._logger = None
         self._conn = None
@@ -13,23 +13,23 @@ class Postgres_Connector():
     def __enter__(self):
         '''Context manager functions to be called BEFORE any functions inside
         ```
-        with Connector(...) as connector: 
+        with Connector(...) as connector:
             ...
         ```
         See https://book.pythontips.com/en/latest/context_managers.html
         '''
         return self
-    
+
     def __exit__(self, type, value, traceback):
-        '''Context manager functions to execute AFTER all functions inside 
+        '''Context manager functions to execute AFTER all functions inside
         ```
-        with Connector(...) as connector: 
+        with Connector(...) as connector:
             ...
         ```
         '''
         self.conn.close()
         self.logger.info('Connection closed.\n')
-    
+
     @property
     def conn(self):
         '''Create or Make the Postgres db connection'''
@@ -45,7 +45,7 @@ class Postgres_Connector():
         if self._logger is None:
             logger = logging.getLogger(__name__)
             logger.setLevel(logging.INFO)
-            if logger.handlers == []: 
+            if logger.handlers == []:
                 sh = logging.StreamHandler(sys.stdout)
                 logger.addHandler(sh)
             self._logger = logger
