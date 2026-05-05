@@ -489,10 +489,11 @@ class Postgres:
 
             # Drop table if we found a difference of if we're doing a rename/replace.
             if rename_replace:
+                recreate_table = True
                 # Make sure our temp table doesn't exist.
                 try:
                     drop_stmt = f"DROP TABLE {self.fully_qualified_table_name}_temp;"
-                    self.logger.info(f"Dropping table with statement:\n{drop_stmt}\n")
+                    self.logger.info(f"Attemting to drop table with statement:\n{drop_stmt}\n")
                     cursor.execute(drop_stmt)
                 except:
                     cursor.execute("ROLLBACK;")
@@ -991,7 +992,7 @@ class Postgres:
         """
         self.get_csv()
 
-        if create_table:
+        if create_table or rename_replace:
             self.create_table(rename_replace)
 
         assert self.check_exists(self.table_name, self.table_schema), (
