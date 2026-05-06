@@ -551,6 +551,14 @@ class Postgres:
                 cursor.execute(create_ddl)
                 cursor.execute("COMMIT;")
 
+                # also check for edge case where we're rename/replacing but the final table doesn't exist yet.
+                if not self.check_exists(self.table_name, self.table_schema) and rename_replace:
+                    create_ddl_base = create_ddl.replace(f"{self.fully_qualified_table_name}_temp", self.fully_qualified_table_name)
+                    self.logger.info(f"Creating table with DDL:\n{create_ddl_base}\n")
+                    cursor.execute(create_ddl_base)
+                    cursor.execute("COMMIT;")
+
+
     def _is_registered(self) -> bool:
         """Check if the table is registered. Based on databridge-airflow-v2/plugins/scripts/checks.py"""
         with self.conn.cursor() as cursor:
