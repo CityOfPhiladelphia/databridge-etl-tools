@@ -10,6 +10,7 @@ import click
 @click.option('--ago_item_name', required=True, help='Must match the AGO "service name" exactly.')
 @click.option('--s3_bucket', required=False)
 @click.option('--s3_key', required=False)
+@click.option('--layer_num', required=False, help='Use this in case this process cant find the correct layer num based on names (e.g. your service name differs from the layer name).')
 def ago(ctx, **kwargs):
     '''Run ETL commands for AGO'''
     ctx.obj = {}
@@ -25,14 +26,14 @@ def ago(ctx, **kwargs):
             help='Size of batch updates to send to AGO')
 @click.option('--exclude_fields', type=click.STRING, default=False, required=False,
             help='Comma separated list of column names to exclude from the update.')
-def append_group(ctx, **kwargs): 
+def append_group(ctx, **kwargs):
     '''Use this group for any commands that utilize append'''
     ctx = utils.pass_params_to_ctx(ctx, **kwargs)
 
 @append_group.command()
 @click.pass_context
 def append(ctx):
-    """Appends records to AGO without truncating. NOTE that this is NOT an upsert 
+    """Appends records to AGO without truncating. NOTE that this is NOT an upsert
     and will absolutely duplicate rows if you run this multiple times."""
     ago = AGO(**ctx.obj)
     ago.get_csv_from_s3()
