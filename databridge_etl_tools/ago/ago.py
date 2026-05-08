@@ -32,7 +32,6 @@ class AGO():
     _ago_metadata = None
     _fields = None
     _layer_object = None
-    _layer_num = None
     _ago_token = None
     _ago_srid = None
     _projection = None
@@ -63,6 +62,7 @@ class AGO():
         self.index_fields = kwargs.get('index_fields', None)
         self.in_srid = kwargs.get('in_srid', None)
         self.clean_columns = kwargs.get('clean_columns', None)
+        self._layer_num = kwargs.get('layer_num', None)
         self.primary_key = kwargs.get('primary_key', None)
         self.proxy_host = kwargs.get('proxy_host', None)
         self.proxy_port = kwargs.get('proxy_port', None)
@@ -176,7 +176,7 @@ class AGO():
                 fields.pop('shape__length', None)
             self._fields = fields
         return self._fields
-    
+
     @property
     def ago_token(self):
         if self._ago_token is None:
@@ -212,6 +212,8 @@ class AGO():
                         layer_num_success = True
                         print(f'Found layer {layer_num} for item {self.ago_item_name}!')
                         break
+                    else:
+                        print(f"layer name \"{data['name']}\" does not match \"{self.ago_item_name.lower()}\" on layer number 0")
                 if layer_num > 10:
                     print(f'Layer number with matching name {self.ago_item_name} not found, giving up.')
                     raise AssertionError(f'Layer number with matching name {self.ago_item_name} not found, giving up.')
@@ -502,7 +504,7 @@ class AGO():
 
 
         # Compare headers in the csv file vs the fields in the ago item.
-        # If the names don't match and we were to upload to AGO anyway, AGO will not actually do 
+        # If the names don't match and we were to upload to AGO anyway, AGO will not actually do
         # anything with our rows but won't tell us anything is wrong!
         if self.exclude_fields:
             ago_fields_comp = set(self.fields.keys()) - set([f.strip() for f in self.exclude_fields.split(',')])
@@ -515,7 +517,7 @@ class AGO():
         # Otherwise we'll miss out on differences.
         row_differences1 = ago_fields_comp - set(rows.fieldnames())
         row_differences2 = set(rows.fieldnames()) - ago_fields_comp
-        
+
         # combine both difference subtractions with a union
         row_differences = row_differences1.union(row_differences2)
 
@@ -527,7 +529,7 @@ class AGO():
                 pass
             else:
                 print(f'Row differences found!: {row_differences}')
-                assert tuple(self.fields.keys()) == rows.fieldnames()    
+                assert tuple(self.fields.keys()) == rows.fieldnames()
         print('Fields are the same! Continuing.')
 
         # Check CSV file rows match the rows we pulled in
@@ -681,7 +683,7 @@ class AGO():
 
         # If the geometry cell is blank, properly pass a NaN or empty value to indicate so.
         # Also account for values like "POINT EMPTY"
-        if not (bool(wkt.strip())) or 'EMPTY' in wkt: 
+        if not (bool(wkt.strip())) or 'EMPTY' in wkt:
             if self.geometric == 'esriGeometryPoint':
                 geom_dict = {"x": 'NaN',
                                 "y": 'NaN',
@@ -700,7 +702,7 @@ class AGO():
         # For different types we can consult this for the proper json format:
         # https://developers.arcgis.com/documentation/common-data-types/geometry-objects.htm
         # If it's not blank,
-        elif bool(wkt.strip()): 
+        elif bool(wkt.strip()):
             if 'POINT' in wkt:
                 projected_x, projected_y = self.project_and_format_shape(wkt)
                 # Format our row, following the docs on this one, see section "In [18]":
@@ -836,11 +838,11 @@ class AGO():
 
 
             if not ago_row:
-                adds.append(formatted_row)    
+                adds.append(formatted_row)
             # If we did get something back from AGO, then we're upserting our row
             if ago_objectid:
                 updates.append(formatted_row)
-            
+
             # Apply once we reach out designated batch amount then reset
             if (len(adds) != 0) and (len(adds) % self.batch_size == 0):
                 print(f'Adding batch of appends ({len(adds)} rows) at row #: {row_count}...')
@@ -1026,7 +1028,7 @@ class AGO():
             post_index(field, is_unique)
             sleep(2)
 
-            
+
         ##############################################
         # now double check to make sure all indexes were made.
 
