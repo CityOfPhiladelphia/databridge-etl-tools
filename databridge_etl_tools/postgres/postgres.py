@@ -749,7 +749,7 @@ class Postgres:
                 )
                 if rename_replace:
                     self.logger.info(f"Renaming {table_name} to {table_name}_old...")
-                    cursor.execute(f"ALTER TABLE {table_name} RENAME TO {table_name}_old;")
+                    cursor.execute(f"DROP TABLE {table_name};")
                     # Now rename the temp table to the original name
                     self.table_name = table_name
                     cursor.execute(f"ALTER TABLE {table_name}_temp RENAME TO {table_name};")
