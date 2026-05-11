@@ -225,7 +225,7 @@ class AGO():
     @property
     def geometry_type(self):
         if self._geometry_type is None:
-            self._geometry_type = self.ago_metadata['layers'][self.layer_num]['geometryType']
+            self._geometry_type = self.ago_metadata['layers'][int(self.layer_num)]['geometryType']
         return self._geometry_type
 
     @property
@@ -239,7 +239,7 @@ class AGO():
                 # Note, initially wanted to use hasGeometryProperties but it seems like it doesn't
                 # show up for point layers. geometryType is more reliable I think?
                 #is_geometric = self.layer_object.properties.hasGeometryProperties
-                geometry_type = self.ago_metadata['layers'][self.layer_num]['geometryType']
+                geometry_type = self.ago_metadata['layers'][int(self.layer_num)]['geometryType']
             except KeyboardInterrupt as e:
                 raise e
             except Exception as e:
