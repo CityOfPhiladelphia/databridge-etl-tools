@@ -485,10 +485,9 @@ class AGO():
         Appends rows from our CSV into a matching item in AGO
         '''
 
-        # First assert that our item in AGO has "create" capabilities:
-        # Actually I don't think this is necessary maybe?
-        #if 'Create' not in self.ago_metadata['capabilities']:
-        #    raise AssertionError(f'Item in AGO does not have "Create" capabilities, cannot append! Please enable editing. Capabilities are: {self.ago_metadata["capabilities"]}')
+        # First assert that our item in AGO has "Editing" capabilities:
+        if 'Editing' not in self.ago_metadata['capabilities']:
+            raise AssertionError(f'Item in AGO does not have "Create" capabilities, cannot append! Please enable editing. Capabilities are: {self.ago_metadata["capabilities"]}')
 
         try:
             rows = etl.fromcsv(self.csv_path, encoding='utf-8')
@@ -759,6 +758,10 @@ class AGO():
         NOTE: This will not delete rows UNLESS it finds rows with the same primary key in AGO. If it finds two rows
         with the same primary key, it will delete the second one.
         '''
+        # First assert that our item in AGO has "Editing" capabilities:
+        if 'Editing' not in self.ago_metadata['capabilities']:
+            raise AssertionError(f'Item in AGO does not have "Create" capabilities, cannot append! Please enable editing. Capabilities are: {self.ago_metadata["capabilities"]}')
+
         # Assert we got a primary_key passed and it's not None.
         assert self.primary_key
 
