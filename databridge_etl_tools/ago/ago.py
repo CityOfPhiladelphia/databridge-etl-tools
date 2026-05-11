@@ -297,6 +297,8 @@ class AGO():
             print('Truncate successful!')
         else:
             raise Exception(f'Truncate failed!: {r.text}')
+        # try to make more durable, ESRI has begun reporting the wrong number sometimes.
+        sleep(2)
         after_truncate_count = self.layer_count
         assert after_truncate_count == 0, f"Truncate failed, layer count not zero! Got: {after_truncate_count}"
 
@@ -628,28 +630,39 @@ class AGO():
         https://developers.arcgis.com/rest/services-reference/enterprise/update-features/
         '''
         edit_url = f'https://services.arcgis.com/{self.ago_org_id}/arcgis/rest/services/{self.ago_item_name}/FeatureServer/{self.layer_num}/{method}'
-        resp = requests.post(
-            edit_url,
-            data={
-                "f": "json",
-                "token": self.ago_token,
-                "rollbackOnFailure": "false",
-                "features": json.dumps(rows)
-            },
-            timeout=30,
-        )
-        try:
-            resp.json()
-        except Exception as e:
-            print(f'Error parsing edit features response as JSON!: {resp.text}')
+        for attempt in range(3):
+            try:
+                resp = requests.post(
+                    edit_url,
+                    data={
+                        "f": "json",
+                        "token": self.ago_token,
+                        "rollbackOnFailure": "false",
+                        "features": json.dumps(rows)
+                    },
+                    timeout=30,
+                )
+                break  # Request completed without timing out, break the loop
+            except requests.exceptions.Timeout:
+                if attempt == 2:  # Failed on the 3rd attempt
+                    raise Exception(f"Failed to edit features: Connection timed out after 3 attempts.")
+                time.sleep(2 ** attempt)  # Exponential backoff (1s, 2s) before retrying
 
-        if resp.json().get('error'):
-            print(f'Error editing features!: {resp.json()["error"]}')
-            raise AssertionError(f'Error editing features!: {resp.json()["error"]}')
-
+        # Check status code first
         if resp.status_code != 200:
-            print(f'Error editing features: {resp.content}')
-            raise
+            raise Exception(f'Error editing features [HTTP {resp.status_code}]: {resp.content}')
+
+        # Safely parse JSON once
+        try:
+            resp_data = resp.json()
+        except requests.exceptions.JSONDecodeError:
+            raise ValueError(f'Error parsing edit features response as JSON!: {resp.text}')
+
+        # Check for ESRI API-level errors
+        if resp_data.get('error'):
+            raise AssertionError(f'Error editing features!: {resp_data["error"]}')
+
+        return resp_data
 
 
     def verify_count(self):
