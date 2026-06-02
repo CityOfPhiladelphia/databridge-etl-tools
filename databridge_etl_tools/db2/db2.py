@@ -620,6 +620,29 @@ class Db2:
                 else:
                     print("\nTable not registered.\n")
 
+                # Pre-drop indexes that we automatically make so we can actually insert without destroying the db
+                # can be identified if starts with FQ table name and 2 underscores
+                get_idxes = f'''
+                SELECT indexname from pg_indexes
+                where tablename = '{self.enterprise_dataset_name}'
+                AND schemaname = '{self.enterprise_schema}'
+                AND indexname NOT IN (
+                    SELECT conname
+                    FROM pg_constraint
+                    WHERE contype IN ('p', 'u')
+                )
+                AND indexname LIKE '{prod_table.replace(".", "_")}_%';
+                '''
+                print(get_idxes)
+                cur.execute(get_idxes)
+                results = cur.fetchall()
+                results = [x[0] for x in results]
+                print(f'Dropping indexes: {results}')
+                for i in results:
+                    cur.execute(f'DROP INDEX IF EXISTS {self.enterprise_schema}.{i}')
+                    cur.execute("COMMIT;")
+                    conn.commit()
+
                 try:
                     update_stmt = f"""
                         BEGIN;
@@ -644,11 +667,6 @@ class Db2:
                     )
                     cur.execute("ROLLBACK;")
                     raise e
-
-                # If successful, drop the etl_staging and old table when we're done to save space.
-                if self.copy_from_source_schema == "etl_staging":
-                    cur.execute(f"DROP TABLE {stage_table}")
-                    cur.execute("COMMIT")
 
         # Note: autocommit takes it out of a transaction.
         with psycopg.connect(self.libpq_conn_string, autocommit=True) as conn:
@@ -697,12 +715,14 @@ class Db2:
                                 # compile the indexes into a comma separated string because we don't know how many could be in the compound.
                                 cols = ", ".join(split_indexes)
                                 idx_name = "_".join(split_indexes) + "_idx"
+                                idx_name = f'{prod_table.replace(".", "_")}__{idx_name}'
                                 # Index name must be unique in the schema
                                 idx_name = prod_table.replace(".", "_") + "_" + idx_name
                                 index_stmt = f"CREATE INDEX IF NOT EXISTS {idx_name} ON {prod_table} USING btree ({cols});"
                             # If single index
                             else:
-                                index_stmt = f"CREATE INDEX IF NOT EXISTS {i}_idx ON {prod_table} USING btree ({i});"
+                                idx_name = f'{prod_table.replace(".", "_")}__{i}_idx'
+                                index_stmt = f"CREATE INDEX IF NOT EXISTS {idx_name} ON {prod_table} USING btree ({i});"
                             print("Running index_stmt: " + str(index_stmt))
                             cur.execute(index_stmt)
                             cur.execute("COMMIT;")
