@@ -918,9 +918,7 @@ class Db2:
                 # confirm our source exists
                 assert self.confirm_table_existence()
                 # confirm our destination table exists, if not make it.
-                if not self.confirm_table_existence(
-                    schema=self.enterprise_schema, table=dest_table
-                ):
+                if not self.confirm_table_existence(schema=self.enterprise_schema, table=dest_table):
                     print(
                         f"Destination table {self.enterprise_schema}.{dest_table} does not exist, creating it now.."
                     )
@@ -943,6 +941,24 @@ class Db2:
                         owner=sql.Identifier(self.enterprise_schema),
                     )
                     cur.execute(alter_owner)
+                    conn.commit()
+                    # Get current shape type and modify shape column to new SRID
+                    alter_geom_stmt = sql.SQL("ALTER TABLE {schema}.{table} DROP COLUMN {shape_field}").format(
+                        schema=sql.Identifier(self.enterprise_schema),
+                        table=sql.Identifier(dest_table),
+                        shape_field=sql.Identifier(self.geom_info['geom_field'])
+                    )
+                    add_geom_stmt = sql.SQL("ALTER TABLE {schema}.{table} ADD COLUMN {shape_field} geometry({shape_type}, {srid})").format(
+                        schema=sql.Identifier(self.enterprise_schema),
+                        table=sql.Identifier(dest_table),
+                        shape_field=sql.Identifier(self.geom_info['geom_field']),
+                        shape_type=sql.Identifier(self.geom_info['geom_type']),
+                        srid=sql.Identifier(str(self.to_srid))
+                    )
+                    print(str(alter_geom_stmt))
+                    print(str(add_geom_stmt))
+                    cur.execute(alter_geom_stmt)
+                    cur.execute(add_geom_stmt)
                     conn.commit()
 
                 delete_stmt = sql.SQL("DELETE FROM {schema}.{table}").format(
