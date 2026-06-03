@@ -6,6 +6,7 @@ import re
 import json
 import pytz
 import datetime
+import io
 
 from carto.sql import SQLClient
 from carto.auth import APIKeyAuthClient
@@ -62,10 +63,10 @@ class Carto():
     _geom_srid = None
     _json_schema_s3_key = None
 
-    def __init__(self, 
-                 connection_string, 
-                 table_name, 
-                 s3_bucket, 
+    def __init__(self,
+                 connection_string,
+                 table_name,
+                 s3_bucket,
                  s3_key,
                  json_schema_s3_key=None,
                  select_users=None,
@@ -264,7 +265,7 @@ class Carto():
 
     def create_table(self):
         self.logger.info('Creating temp table...')
-        stmt = '''DROP TABLE IF EXISTS {table_name}; 
+        stmt = '''DROP TABLE IF EXISTS {table_name};
                     CREATE TABLE {table_name} ({schema});'''.format(table_name=self.temp_table_name,
                                                                     schema=self.schema)
         self.execute_sql(stmt)
@@ -278,7 +279,7 @@ class Carto():
             raise Exception(message)
 
         self.logger.info('Temp table created successfully.\n')
-        
+
     def confirm_indexes(self, table_name):
         if not self.index_fields:
             print('No index fields specified, skipping index confirmation.')
@@ -289,7 +290,7 @@ class Carto():
             create_idx_stmts = []
             existing_indexes = [ x['indexname'] for x in response['rows'] ]
             wanted_indexes = self.index_fields.split(',')
-            
+
             idx_counter = 1
             for index_field in wanted_indexes:
                 # Skip shape index, carto automatically makes it for the shape field it makes called "the_geom"
@@ -319,7 +320,7 @@ class Carto():
                 for s in create_idx_stmts:
                     print(f'Creating indexes: {s}')
                     self.execute_sql(s)
-                    self.execute_sql('COMMIT;')  
+                    self.execute_sql('COMMIT;')
             else:
                 print('Indexes confirmed.\n')
 
@@ -328,58 +329,97 @@ class Carto():
 
     def write(self):
         self.get_csv_from_s3()
-        try:
-            rows = etl.fromcsv(self.csv_path, encoding='utf-8')
-        except UnicodeError:
-            self.logger.info("Exception encountered trying to import rows with utf-8 encoding, trying latin-1...")
-            rows = etl.fromcsv(self.csv_path, encoding='latin-1')
-        header = rows[0]
 
-        # Treat "date" (NOT timestamp!) type fields specially, we have to make sure we convert them right for Carto.
-        # Grab the json schema again so we can determine the date fields.
+        # Get a CSV row count without blowing up our RAM
+        with open(self.csv_path, 'r') as f:
+            reader = csv.reader(f)
+            # enumerate(reader) yields 0 for header, 1 for row 1, etc.
+            # total_rows ends up matching the exact record count
+            self.csv_count = sum(1 for _ in reader) - 1
+
+        # 1. Determine date fields from schema
+        date_fields = set()
         with open(self.json_schema_path) as json_file:
             schema = json.load(json_file).get('fields', None)
             if not schema:
                 self.logger.error('Json schema malformatted...')
-                raise
+                raise ValueError('Invalid schema')
+
         for i in schema:
-            if i['type'] == 'date':
-                field_name = i['name']
-                print(f'Localizing date field: "{field_name}"..')
-                # Add midnight to the date and then localize to EST so Carto displays it properly.
-                rows = rows.convert(field_name, lambda c: pytz.timezone('US/Eastern').localize(datetime.datetime.strptime(c + ' 00:00:00', '%Y-%m-%d %H:%M:%S')) if c else None)
-                print(f'Field "{field_name}" localized.')
+            if i.get('type') == 'date':
+                date_fields.add(i['name'])
 
-        str_header = ''
-        num_fields = len(header)
-        self._num_rows_in_upload_file = rows.nrows()
-        for i, field in enumerate(header):
-            if i < num_fields - 1:
-                str_header += field + ', '
-            else:
-                str_header += field
+        # 2. Try encoding and open the source file handler safely
+        try:
+            encoding = 'utf-8'
+            # Test open
+            with open(self.csv_path, encoding=encoding) as f:
+                f.readline()
+        except UnicodeDecodeError:
+            self.logger.info("Exception encountered trying to import rows with utf-8 encoding, trying latin-1...")
+            encoding = 'latin-1'
 
-        self.logger.info('Writing to temp table...')
-        # format geom field:
-        # commenting this out because we have geopetl placing the SRID in the geom field
-        #if self.geom_field and self.geom_srid:
-        #    rows = rows.convert(self.geom_field,
-        #                lambda c: 'SRID={srid};{geom}'.format(srid=self.geom_srid, geom=c) if c else '')
-        write_file = self.temp_csv_path
-        rows.tocsv(write_file)
+        # 3. Create a generator to process rows on-the-fly (Streaming)
+        def row_processor():
+            eastern = pytz.timezone('US/Eastern')
+
+            with open(self.csv_path, 'r', encoding=encoding) as f:
+                # Using DictReader makes handling columns by name memory-efficient
+                reader = csv.DictReader(f)
+
+                # Yield the header first for the CSV stream
+                header = reader.fieldnames
+                output = io.StringIO()
+                writer = csv.DictWriter(output, fieldnames=header)
+                writer.writeheader()
+                yield output.getvalue().encode('utf-8')
+
+                # Process and yield row by row
+                for row in reader:
+                    output = io.StringIO()
+                    writer = csv.DictWriter(output, fieldnames=header)
+
+                    # Localize date fields
+                    for field_name in date_fields:
+                        val = row.get(field_name)
+                        if val:
+                            try:
+                                dt = datetime.datetime.strptime(val + ' 00:00:00', '%Y-%m-%d %H:%M:%S')
+                                row[field_name] = eastern.localize(dt).isoformat() # or your preferred string format
+                            except ValueError:
+                                pass # Handle badly formatted dates safely
+
+                    writer.writerow(row)
+                    yield output.getvalue().encode('utf-8')
+
+        # 4. Get header string for the Carto COPY command
+        with open(self.csv_path, 'r', encoding=encoding) as f:
+            reader = csv.reader(f)
+            header_list = next(reader)
+            str_header = ', '.join(header_list)
+
+        self.logger.info('Streaming data directly to Carto...')
+
         q = "COPY {table_name} ({header}) FROM STDIN WITH (FORMAT csv, HEADER true)".format(
             table_name=self.temp_table_name, header=str_header)
         url = USR_BASE_URL.format(user=self.user) + 'api/v2/sql/copyfrom'
-        with open(write_file, 'rb') as f:
-            r = requests.post(url, params={'api_key': self.api_key, 'q': q}, data=f, stream=True)
 
-            if r.status_code != 200:
-                self.logger.error('Carto Write Error Response: {}'.format(r.text))
-                self.logger.error('Exiting...')
-                exit(1)
-            else:
-                status = r.json()
-                self.logger.info('Carto Write Successful: {} rows imported.\n'.format(status['total_rows']))
+        # 5. Stream the generator straight into the requests POST body
+        r = requests.post(
+            url,
+            params={'api_key': self.api_key, 'q': q},
+            data=row_processor(),  # Passing a generator here triggers HTTP chunked transfer encoding
+            headers={'Content-Type': 'application/octet-stream'}
+        )
+
+        if r.status_code != 200:
+            self.logger.error('Carto Write Error Response: {}'.format(r.text))
+            self.logger.error('Exiting...')
+            exit(1)
+        else:
+            status = r.json()
+            # Note: self._num_rows_in_upload_file omitted as getting it requires a full file scan.
+            self.logger.info('Carto Write Successful: {} rows imported.\n'.format(status.get('total_rows')))
 
     def verify_count(self):
         self.logger.info('Verifying row count...')
@@ -388,7 +428,7 @@ class Carto():
         num_rows_in_table = data['rows'][0]['count']
         num_rows_inserted = num_rows_in_table  # for now until inserts/upserts are implemented
         # Carto does count the header
-        num_rows_expected = self._num_rows_in_upload_file
+        num_rows_expected = self.csv_count
         message = '{} - expected rows: {} inserted rows: {}.'.format(
             self.temp_table_name,
             num_rows_expected,
@@ -509,4 +549,3 @@ class Carto():
             raise e
         finally:
             self.cleanup()
-
