@@ -38,6 +38,10 @@ RUN python -m venv /home/airflow/venvs/om && \
 RUN python -m venv /home/airflow/venvs/arcgis && \
     /home/airflow/venvs/arcgis/bin/pip install "pendulum" "arcgis"
 
+# Sandbox for dbt-airflow
+RUN python -m venv /home/airflow/venvs/dbt && \
+    /home/airflow/venvs/dbt/bin/pip install "dbt-postgres==1.10.0"
+
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
   "apache-airflow-providers-amazon[s3fs]" "networkx" "ratelimit" .
