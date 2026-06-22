@@ -38,9 +38,9 @@ RUN python -m venv /home/airflow/venvs/om && \
 RUN python -m venv /home/airflow/venvs/arcgis && \
     /home/airflow/venvs/arcgis/bin/pip install "pendulum" "arcgis"
 
-# Sandbox for dbt-airflow. Must install dbt-core to get around pip issue where pip pulls an alpha version of dbt-core
+# Sandbox for dbt-airflow
 RUN python -m venv /home/airflow/venvs/dbt && \
-    /home/airflow/venvs/dbt/bin/pip install "dbt-core>=1.8.0,<2.0.0" "dbt-postgres>=1.8.0,<2.0.0"
+    /home/airflow/venvs/dbt/bin/pip install "dbt-core==1.11.11" "dbt-postgres==1.10.1"
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
