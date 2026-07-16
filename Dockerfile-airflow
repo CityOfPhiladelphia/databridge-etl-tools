@@ -30,10 +30,6 @@ COPY --chown=airflow:airflow tests/ ./tests/
 # Python syntax check
 RUN python -m compileall ./databridge_etl_tools
 
-# Dedicated sandbox for Openmetadata library
-RUN python -m venv /home/airflow/venvs/om && \
-    /home/airflow/venvs/om/bin/pip install "openmetadata-ingestion==1.13.0" "cachetools" "pendulum"
-
 # Dedicated sandbox for ArcGIS library
 RUN python -m venv /home/airflow/venvs/arcgis && \
     /home/airflow/venvs/arcgis/bin/pip install "pendulum" "arcgis"
