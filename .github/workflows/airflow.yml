@@ -17,8 +17,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@main
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       # Prune docker system to clear space
@@ -51,8 +51,8 @@ jobs:
           POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
 
       - name: AGO pytests
         run: |
@@ -67,8 +67,8 @@ jobs:
         env:
           AGO_USER: ${{ secrets.AGO_USER }}
           AGO_PASSWORD: ${{ secrets.AGO_PASSWORD }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
 
       - name: Carto pytests
         run: |
@@ -83,8 +83,8 @@ jobs:
         env:
           CARTO_USER: ${{ secrets.CARTO_USER }}
           CARTO_PASSWORD: ${{ secrets.CARTO_PASSWORD }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
 
       - name: Sharepoint pytests
         run: |
@@ -101,8 +101,8 @@ jobs:
           GRAPHAPI_APPLICATION_ID: ${{ secrets.GRAPHAPI_APPLICATION_ID }}
           GRAPHAPI_TENANT_ID: ${{ secrets.GRAPHAPI_TENANT_ID }}
           GRAPHAPI_SECRET_VALUE: ${{ secrets.GRAPHAPI_SECRET_VALUE }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
 
       # https://github.com/aws-actions/amazon-ecr-login
       - name: Login to Amazon ECR
@@ -113,8 +113,8 @@ jobs:
       - name: Deploy test ECR
         if: github.ref != 'refs/heads/master'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
           ECR_TEST_REPOSITORY_URL: ${{ secrets.ECR_TEST_REPOSITORY_URL }}
         run: |
           docker tag dbtools-airflow:latest $ECR_TEST_REPOSITORY_URL:airflow-latest
@@ -124,8 +124,8 @@ jobs:
       - name: Deploy prod ECR
         if: github.ref == 'refs/heads/master'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CITYGEO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CITYGEO_AWS_SECRET_ACCESS_KEY }}
           ECR_REPOSITORY_URL: ${{ secrets.ECR_REPOSITORY_URL }}
         run: |
           docker tag dbtools-airflow:latest $ECR_REPOSITORY_URL:airflow-latest
