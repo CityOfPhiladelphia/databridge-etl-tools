@@ -13,14 +13,15 @@ csv.field_size_limit(sys.maxsize)
 class Knack():
     '''
     Extracts a CSV from Knack (https://dashboard.knack.com/apps)
-    ''' 
+    '''
     def __init__(self,
                  knack_objectid,
-                 app_id, 
-                 api_key, 
-                 s3_bucket, 
+                 app_id,
+                 api_key,
+                 s3_bucket,
                  s3_key,
                  rename_fields,
+                 exclude_fields,
                  **kwargs):
         self.knack_objectid = knack_objectid
         self.app_id = app_id
@@ -28,6 +29,12 @@ class Knack():
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
         self.rename_fields = rename_fields
+        if isinstance(exclude_fields, str):
+            self.exclude_fields = {f.strip() for f in exclude_fields.split(",") if f.strip()}
+        else:
+            self.exclude_fields = set()
+        # to hold the knack names of fields we're attempting to exclude
+        self.true_exclude_fields = []
         self.csv_path = '/tmp/output.csv'
 
     def get_type(self, knack_type):
@@ -119,7 +126,16 @@ class Knack():
         if not data['records']:
             raise Exception(f"Failed to fetch data. Status Code: {response.status_code}. Reason: {response.text}")
 
-        yield data['records']
+        records = data['records']
+
+        # Remove excluded keys from every record dict before yielding
+        # We can't tell knack what to return apparently so have to deal with it at retrieval time
+        if self.true_exclude_fields:
+            for record in records:
+                for field in self.true_exclude_fields:
+                    record.pop(field, None)
+
+        yield records
 
         if int(data['current_page']) < data['total_pages']:
             yield from self.get_records(page=int(data['current_page']) + 1)
@@ -187,6 +203,11 @@ class Knack():
 
     def extract(self):
         schema = self.get_schema()
+        schema['fields'] = [
+                f for f in schema['fields']
+                if f.get('name') not in self.exclude_fields
+                and f.get('knack_key') not in self.exclude_fields
+            ]
 
         # Knack API Endpoint
         endpoint = f'https://api.knack.com/v1/objects/{self.knack_objectid}/records'
@@ -194,8 +215,16 @@ class Knack():
 
         headers = []
         for field in schema['fields']:
-            headers.append(field['name'])
- 
+            if field['name'] not in self.exclude_fields:
+                headers.append(field['name'])
+
+            # save the actual name of fields we want to exclude in knack (ex: field_454 or field_454_raw)
+            # not sure why but they can be either "field_454" or "field_454_raw" when we run get_records()
+            if field['name'] in self.exclude_fields:
+                self.true_exclude_fields.append(field['knack_key'])
+                if '_raw' not in field['knack_key']:
+                    self.true_exclude_fields.append(field['knack_key'] + '_raw')
+
         with open(self.csv_path, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=headers)
 
@@ -205,14 +234,12 @@ class Knack():
                 for record in records_batch:
                     out_record = self.convert_to_csv_row(schema, record)
                     writer.writerow(out_record)
-        
+
         if self.rename_fields:
             self.rename_csv_fields()
-                    
+
         num_lines = sum(1 for _ in open(self.csv_path)) - 1
         assert num_lines > 0, 'CSV file contains 0 lines??'
         file_size = size(os.path.getsize(self.csv_path))
         print(f'Extraction successful? File size: {file_size}, total lines: {num_lines}')
         self.load_to_s3()
-
-        

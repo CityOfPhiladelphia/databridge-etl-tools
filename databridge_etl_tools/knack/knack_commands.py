@@ -11,11 +11,12 @@ import click
 @click.option('--s3_bucket', required=True, help='Bucket to place the extracted csv in.')
 @click.option('--s3_key', required=True, help='key under the bucket, example: "staging/dept/table_name.csv')
 @click.option('--rename_fields', required=False, default=None, help='Fields to rename, example: "old_field_name:new_field_name,old_field_name2:new_field_name2"')
+@click.option('--exclude_fields', required=False, default=None, help='Fields to exclude, example: "field_1,field_2')
 @click.option('--indent', type=int, default=None, help='???')
 def knack(ctx, **kwargs):
     ctx.obj = Knack(**kwargs)
 
 @knack.command()
 @click.pass_context
-def extract(ctx): 
+def extract(ctx):
     ctx.obj.extract()
