@@ -35,7 +35,7 @@ class Knack():
             self.exclude_fields = set()
         # to hold the knack names of fields we're attempting to exclude
         self.true_exclude_fields = []
-        self.csv_path = '/tmp/output.csv'
+        self.csv_path = f'/tmp/{self.knack_objectid}_{self.app_id}_knack_output.csv'
 
     def get_type(self, knack_type):
         if knack_type == 'boolean':
