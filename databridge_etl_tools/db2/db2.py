@@ -1,20 +1,7 @@
-import json
-import logging
-import os
 import re
-import signal
-import sys
-import time
-
 import click
-import numpy as np
 import psycopg
-import pyproj
 from psycopg import sql
-from pyproj import Transformer
-from pyproj.transformer import TransformerGroup
-from shapely import wkb
-from shapely.ops import transform as shp_transform
 
 
 class Db2:
@@ -748,249 +735,174 @@ class Db2:
 
                 print("\nSuccess!")
 
-    def build_reprojector(self):
-        """
-        sub-function of reproject_shapes().
-        Return (callable, to_srid) that maps (x,y,[z]) -> transformed coords.
+    def _get_geom_transform_sql(self) -> sql.Composable:
+        """Build the PostGIS geometry transformation expression for any valid SRID pair."""
+        src_srid = self.geom_info["srid"]
+        dst_srid = self.to_srid
+        geom_col = sql.Identifier(self.geom_info["geom_field"])
 
-        - For 2272 -> 3857:
-            1) 2272 -> 4269  (to NAD83 geographic)
-            2) 4269 -> 4326  via EPSG:1515  (ArcGIS NAD_1983_To_WGS_1984_5)
-            3) 4326 -> 3857
-        - For 4326 -> 3857: single step.
-        """
-        if self.geom_info["srid"] == self.to_srid:
-            raise NotImplementedError(
-                "No reprojection needed, source and target SRID are the same. Have not implemented manual nudge yet if thats what you want."
-            )
-            # print('No reprojection needed, source and target SRID are the same. Will only manually nudge!')
-            # t_shift = Transformer.from_pipeline(
-            #    f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
-            # )
-            # def reproj_auto(*args):
-
-        if self.geom_info["srid"] == 2272 and self.to_srid == 3857:
-            t1 = Transformer.from_crs(
-                "EPSG:2272", "EPSG:4269", always_xy=True
-            )  # ftUS -> deg
-            # NOTE: 1950 is NAD83->NAD83(CSRS)(4). If you want ArcGIS “_5”, use EPSG:1515 instead.
-            t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1950")
-            # t2 = Transformer.from_pipeline("urn:ogc:def:coordinateOperation:EPSG::1515")
-            t3 = Transformer.from_crs(
-                "EPSG:4326", "EPSG:3857", always_xy=True
-            )  # deg -> m
-
-            # Manual nudge in cm to align with arcgis projections
-            t_shift = Transformer.from_pipeline(
-                f"+proj=pipeline +step +proj=affine +s11=1 +s22=1 +xoff={self.xshift} +yoff={self.yshift}"
+        # 1. Base Geometry / Reprojection Expression
+        if src_srid == dst_srid:
+            # Pass geometry through as-is if no reprojection is needed
+            expr = geom_col
+        else:
+            # PostGIS handles any valid src -> dst conversion defined in spatial_ref_sys
+            expr = sql.SQL("ST_Transform({geom}, {to_srid})").format(
+                geom=geom_col,
+                to_srid=sql.Literal(dst_srid),
             )
 
-            def reproj_vec(xyz: np.ndarray) -> np.ndarray:
-                """Shapely-2 vectorized path: xyz is (N,2) or (N,3); return same shape."""
-                x0, y0 = xyz[:, 0], xyz[:, 1]
-                has_z = xyz.shape[1] == 3
-                z0 = xyz[:, 2] if has_z else None
+        # 2. Conditional Shift / Nudge
+        has_shift = getattr(self, "xshift", 0) != 0 or getattr(
+            self, "yshift", 0
+        ) != 0
+        if has_shift:
+            expr = sql.SQL(
+                "ST_Translate({base_expr}, {xshift}, {yshift})"
+            ).format(
+                base_expr=expr,
+                xshift=sql.Literal(self.xshift),
+                yshift=sql.Literal(self.yshift),
+            )
 
-                x1, y1 = t1.transform(x0, y0)  # 2272 -> 4269
-                x2, y2 = t2.transform(x1, y1)  # 4269 -> 4326  (or 1515 if you switch)
-                x3, y3 = t3.transform(x2, y2)  # 4326 -> 3857
-                x4, y4 = t_shift.transform(x3, y3)  # post-shift in meters
+        return expr
 
-                if has_z:
-                    return np.column_stack([x4, y4, z0])  # preserve Z as-is
-                else:
-                    return np.column_stack([x4, y4])
+    def copy_rows_transformed(self, cur, dst_table: str):
+        """Execute in-database transform and copy directly via PostGIS."""
+        non_geom_cols = [
+            col
+            for col in self.column_info.keys()
+            if col != self.geom_info["geom_field"]
+        ]
 
-            # Shapely-1 fallback (scalar signature)
-            def reproj_scalar(x, y, z=None):
-                x, y = t1.transform(x, y)
-                x, y = t2.transform(x, y)
-                x, y = t3.transform(x, y)
-                x, y = t_shift.transform(x, y)
-                return (x, y) if z is None else (x, y, z)
+        cols_sql = sql.SQL(", ").join(map(sql.Identifier, non_geom_cols))
+        geom_col = sql.Identifier(self.geom_info["geom_field"])
+        geom_expr = self._get_geom_transform_sql()
 
-            def reproj_auto(*args):
-                # Shapely-2 calls with (array,), Shapely-1 with (x,y[,z])
-                return reproj_vec(args[0]) if len(args) == 1 else reproj_scalar(*args)
-
-            return reproj_auto
-
-        if self.geom_info["srid"] == 4326 and self.to_srid == 3857:
-            t = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-
-            def reproj_auto(*args):
-                if len(args) == 1:
-                    xyz = args[0]
-                    x, y = t.transform(xyz[:, 0], xyz[:, 1])
-                    return (
-                        np.column_stack([x, y])
-                        if xyz.shape[1] == 2
-                        else np.column_stack([x, y, xyz[:, 2]])
-                    )
-                else:
-                    x, y, z = (args + (None,))[:3]
-                    x, y = t.transform(x, y)
-                    return (x, y) if z is None else (x, y, z)
-
-            return reproj_auto
-
-        raise ValueError(
-            f"This script currently supports src SRID 2272 or 4326 to dst 3857. Got {self.geom_info['srid']} -> {self.to_srid}."
-        )
-
-    def copy_rows_transformed(self, dst_table, reproj, batch=1000):
-        """
-        sub-function of reproject_shapes().
-        Stream from src, transform geometry, insert into dst in batches.
-        """
-
-        non_geom_cols = [col for col in self.column_info.keys()]
-
-        non_geom_cols.remove(self.geom_info["geom_field"])
-
-        # Build SELECT on src: non-geom columns + ST_AsEWKB(geom)
-        select_sql = sql.SQL("SELECT {cols}, ST_AsEWKB({geom}) FROM {src}").format(
-            cols=sql.SQL(", ").join(map(sql.Identifier, non_geom_cols)),
-            geom=sql.Identifier(self.geom_info["geom_field"]),
-            src=sql.Identifier(self.enterprise_schema, self.enterprise_dataset_name),
-        )
-
-        # Build INSERT for dst: same non-geom cols + geom
         insert_sql = sql.SQL(
-            "INSERT INTO {dst} ({cols}, {geom}) VALUES ({vals}, ST_SetSRID(%s::geometry, %s))"
+            """
+            INSERT INTO {dst_schema}.{dst_table} ({cols}, {geom_col})
+            SELECT {cols}, {geom_expr}
+            FROM {src_schema}.{src_table}
+            """
         ).format(
-            dst=sql.Identifier(self.enterprise_schema, dst_table),
-            cols=sql.SQL(", ").join(map(sql.Identifier, non_geom_cols)),
-            geom=sql.Identifier(self.geom_info["geom_field"]),
-            vals=sql.SQL(", ").join(sql.Placeholder() for _ in non_geom_cols),
+            dst_schema=sql.Identifier(self.enterprise_schema),
+            dst_table=sql.Identifier(dst_table),
+            src_schema=sql.Identifier(self.copy_from_source_schema),
+            src_table=sql.Identifier(self.enterprise_dataset_name),
+            cols=cols_sql,
+            geom_col=geom_col,
+            geom_expr=geom_expr,
         )
 
-        with psycopg.connect(self.libpq_conn_string) as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"SET statement_timeout = {self.timeout}")
-                print("Beginning transform/copy..")
-                cur.execute(select_sql)
-                rows = cur.fetchmany(batch)
-
-                while rows:
-                    params = []
-                    for row in rows:
-                        *attrs, ewkb = row
-                        if ewkb is None:
-                            # Null geometry: insert as NULL straight through
-                            params.append(tuple(attrs) + (None, self.to_srid))
-                            continue
-
-                        g = wkb.loads(bytes(ewkb), hex=False)
-                        g2 = shp_transform(reproj, g)
-                        ewkb_out = memoryview(wkb.dumps(g2, hex=False))
-                        params.append(tuple(attrs) + (ewkb_out, self.to_srid))
-
-                    with conn.cursor() as cur2:
-                        cur2.execute(f"SET statement_timeout = {self.timeout}")
-                        cur2.executemany(insert_sql, params)
-                    conn.commit()
-
-                    rows = cur.fetchmany(batch)
-                    # Print progress every 10k rows
-                    if cur.rownumber % 10000 < batch:
-                        print(f"  {cur.rownumber} rows processed...")
-        print("Finished copying and transforming rows.")
+        print("Transforming and inserting records inside PostgreSQL...")
+        cur.execute(insert_sql)
+        print(f"Transformed and inserted {cur.rowcount} rows.")
 
     def reproject_shapes(self):
-        """
-        Copy geometries from a source table (SRID 2272 or 4326) to a destination table (SRID 3857),
-        transforming geometries client-side with pyproj (ArcGIS-parity datum step EPSG:1515 for 2272->3857).
-        All non-geometry columns are copied as-is. No in-place updates.
-        """
-
+        """Manage destination table lifecycle and execute in-database spatial reprojection."""
         self.get_table_column_info_from_enterprise()
         self.get_geom_column_info()
 
-        dest_table = self.enterprise_dataset_name + "_3857"
-
-        # Build the coordinate transformer
-        reproj = self.build_reprojector()
+        dest_table = f"{self.enterprise_dataset_name}_3857"
+        geom_col_name = self.geom_info["geom_field"]
 
         with psycopg.connect(self.libpq_conn_string) as conn:
             with conn.cursor() as cur:
                 cur.execute(f"SET statement_timeout = {self.timeout}")
-                # confirm our source exists
+
                 assert self.confirm_table_existence()
-                # confirm our destination table exists, if not make it.
-                if not self.confirm_table_existence(schema=self.enterprise_schema, table=dest_table):
+
+                # Create destination table if it doesn't exist
+                if not self.confirm_table_existence(
+                    schema=self.enterprise_schema, table=dest_table
+                ):
                     print(
-                        f"Destination table {self.enterprise_schema}.{dest_table} does not exist, creating it now.."
+                        f"Creating destination table {self.enterprise_schema}.{dest_table}..."
                     )
-                    create_stmt = sql.SQL(
-                        "CREATE TABLE {schema}.{table} (LIKE {src_schema}.{src_table} EXCLUDING CONSTRAINTS)"
-                    ).format(
-                        schema=sql.Identifier(self.enterprise_schema),
-                        table=sql.Identifier(dest_table),
-                        src_schema=sql.Identifier(self.copy_from_source_schema),
-                        src_table=sql.Identifier(self.enterprise_dataset_name),
+                    cur.execute(
+                        sql.SQL(
+                            "CREATE TABLE {schema}.{table} (LIKE {src_schema}.{src_table} EXCLUDING CONSTRAINTS)"
+                        ).format(
+                            schema=sql.Identifier(self.enterprise_schema),
+                            table=sql.Identifier(dest_table),
+                            src_schema=sql.Identifier(
+                                self.copy_from_source_schema
+                            ),
+                            src_table=sql.Identifier(
+                                self.enterprise_dataset_name
+                            ),
+                        )
                     )
-                    print("Running create_stmt: " + str(create_stmt))
-                    cur.execute(create_stmt)
-                    conn.commit()
-                    alter_owner = sql.SQL(
-                        "ALTER TABLE {schema}.{table} OWNER TO {owner}"
-                    ).format(
-                        schema=sql.Identifier(self.enterprise_schema),
-                        table=sql.Identifier(dest_table),
-                        owner=sql.Identifier(self.enterprise_schema),
+                    cur.execute(
+                        sql.SQL(
+                            "ALTER TABLE {schema}.{table} OWNER TO {owner}"
+                        ).format(
+                            schema=sql.Identifier(self.enterprise_schema),
+                            table=sql.Identifier(dest_table),
+                            owner=sql.Identifier(self.enterprise_schema),
+                        )
                     )
-                    cur.execute(alter_owner)
-                    conn.commit()
-                    # Get current shape type and modify shape column to new SRID
-                    alter_geom_stmt = sql.SQL("ALTER TABLE {schema}.{table} DROP COLUMN {shape_field}").format(
-                        schema=sql.Identifier(self.enterprise_schema),
-                        table=sql.Identifier(dest_table),
-                        shape_field=sql.Identifier(self.geom_info['geom_field'])
-                    )
-                    add_geom_stmt = sql.SQL("ALTER TABLE {schema}.{table} ADD COLUMN {shape_field} geometry({shape_type}, {srid})").format(
-                        schema=sql.Identifier(self.enterprise_schema),
-                        table=sql.Identifier(dest_table),
-                        shape_field=sql.Identifier(self.geom_info['geom_field']),
-                        shape_type=sql.Identifier(self.geom_info['geom_type']),
-                        srid=sql.Identifier(str(self.to_srid))
-                    )
-                    print(str(alter_geom_stmt))
-                    print(str(add_geom_stmt))
-                    cur.execute(alter_geom_stmt)
-                    cur.execute(add_geom_stmt)
-                    conn.commit()
 
-                delete_stmt = sql.SQL("DELETE FROM {schema}.{table}").format(
-                    schema=sql.Identifier(self.enterprise_schema),
-                    table=sql.Identifier(dest_table),
-                )
-                print("Running delete_stmt: " + str(delete_stmt))
-                cur.execute(delete_stmt)
-                conn.commit()
+                    # Replace geometry column with target SRID
+                    cur.execute(
+                        sql.SQL(
+                            "ALTER TABLE {schema}.{table} DROP COLUMN {shape_field}"
+                        ).format(
+                            schema=sql.Identifier(self.enterprise_schema),
+                            table=sql.Identifier(dest_table),
+                            shape_field=sql.Identifier(geom_col_name),
+                        )
+                    )
+                    cur.execute(
+                        sql.SQL(
+                            "ALTER TABLE {schema}.{table} ADD COLUMN {shape_field} geometry({shape_type}, {srid})"
+                        ).format(
+                            schema=sql.Identifier(self.enterprise_schema),
+                            table=sql.Identifier(dest_table),
+                            shape_field=sql.Identifier(geom_col_name),
+                            shape_type=sql.Identifier(
+                                self.geom_info["geom_type"]
+                            ),
+                            srid=sql.Literal(self.to_srid),
+                        )
+                    )
 
-                # Stream, transform, insert
-                self.copy_rows_transformed(dest_table, reproj)
-
-        with psycopg.connect(self.libpq_conn_string) as conn:
-            with conn.cursor() as cur:
-                cur.execute(f"SET statement_timeout = {self.timeout}")
-                # Try to make shape index always
-                if self.geom_info:
-                    geom_column = self.geom_info["geom_field"]
-                    shape_index_stmt = f"CREATE INDEX IF NOT EXISTS {geom_column}_gist ON {self.enterprise_schema}.{dest_table} USING GIST ({geom_column});"
-                    print("\nRunning shape_index_stmt: " + str(shape_index_stmt))
-                    cur.execute(shape_index_stmt)
-                    cur.execute("COMMIT;")
-
-                # Optional: analyze for planner stats
+                # Clear previous data
+                print(f"Truncating {self.enterprise_schema}.{dest_table}...")
                 cur.execute(
-                    sql.SQL("ANALYZE {tbl}").format(
-                        tbl=sql.Identifier(self.enterprise_schema, dest_table)
+                    sql.SQL("TRUNCATE TABLE {schema}.{table}").format(
+                        schema=sql.Identifier(self.enterprise_schema),
+                        table=sql.Identifier(dest_table),
                     )
                 )
-                conn.commit()
 
+                # Stream transform & insert entirely in-engine
+                self.copy_rows_transformed(cur, dest_table)
+
+                # Spatial indexing & analysis
+                index_name = f"{dest_table}_{geom_col_name}_gist"
+                print(f"Creating spatial index {index_name}...")
+                cur.execute(
+                    sql.SQL(
+                        "CREATE INDEX IF NOT EXISTS {idx} ON {schema}.{table} USING GIST ({geom})"
+                    ).format(
+                        idx=sql.Identifier(index_name),
+                        schema=sql.Identifier(self.enterprise_schema),
+                        table=sql.Identifier(dest_table),
+                        geom=sql.Identifier(geom_col_name),
+                    )
+                )
+
+                print("Running ANALYZE...")
+                cur.execute(
+                    sql.SQL("ANALYZE {schema}.{table}").format(
+                        schema=sql.Identifier(self.enterprise_schema),
+                        table=sql.Identifier(dest_table),
+                    )
+                )
+
+                conn.commit()
 
 @click.group()
 def cli():
