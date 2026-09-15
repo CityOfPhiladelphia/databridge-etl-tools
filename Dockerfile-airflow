@@ -40,5 +40,5 @@ RUN python -m venv /home/airflow/venvs/dbt && \
 
 # Install databridge-etl-tools using pyproject.toml
 RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
-  "apache-airflow-providers-amazon[s3fs]" "openmetadata-ingestion==1.13.0" "networkx" "ratelimit" "fabric" .
+  "apache-airflow-providers-amazon[s3fs]" "openmetadata-ingestion==2.0.1" "networkx" "ratelimit" "fabric" .
   # --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt" .
