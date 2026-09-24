@@ -3,10 +3,6 @@
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# Disable autodiscovery of package folders, only use dbtools dir
-[tools.setuptools]
-py_modules = ['databridge_etl_tools']
-
 [tool.setuptools.packages.find]
 where = ["."]
 exclude = ["venv*", "tests*", "docs*"]
@@ -23,7 +19,7 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
-    "setuptools<80", # pinned to an older version of setuptools to make the carto package work, until we can remove it.
+    "setuptools",
     "carto",
     "boto3",
     "botocore",
