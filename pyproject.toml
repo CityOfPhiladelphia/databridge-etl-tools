@@ -3,10 +3,6 @@
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# Disable autodiscovery of package folders, only use dbtools dir
-[tool.setuptools]
-py_modules = ['databridge_etl_tools']
-
 [tool.setuptools.packages.find]
 where = ["."]
 exclude = ["venv*", "tests*", "docs*"]
