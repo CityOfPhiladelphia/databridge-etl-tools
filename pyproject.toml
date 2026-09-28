@@ -23,6 +23,7 @@ readme = "README.md"
 license = "MIT"
 dependencies = [
     "geopetl @ git+https://github.com/CityOfPhiladelphia/geopetl.git@oracle-default-fix",
+    "espy @ git+https://github.com/CityOfPhiladelphia/espy.git@v1.1.0",
     "setuptools<80", # pinned to an older version of setuptools to make the carto package work, until we can remove it.
     "carto",
     "boto3",
