@@ -1,4 +1,3 @@
-from .. import utils 
 from .sharepoint import Sharepoint
 import click
 
