@@ -11,9 +11,6 @@ py_modules = ['databridge_etl_tools']
 where = ["."]
 exclude = ["venv*", "tests*", "docs*"]
 
-[tool.uv.sources]
-espy = { git = "https://github.com/CityOfPhiladelphia/espy.git", tag = "v2.0.0" }
-
 [project]
 name = "databridge-etl-tools"
 version = "1.5.0" 
@@ -51,8 +48,6 @@ dependencies = [
     "Shapely",
     "psycopg",
     "psycopg2-binary",
-    "six",
-    "moto",
     "pandas",
     "pytest",
     "requests-mock",
@@ -65,7 +60,7 @@ dependencies = [
     "msgraph-core", # Necessary for sharepoint
     "msgraph-beta-sdk", # Necessary for sharepoint # Necessary for sharepoint
     "openpyxl",
-    "espy",
+    "espy @ git+https://github.com/CityOfPhiladelphia/espy.git@v2.0.0",
     "pydantic>=2.13.5",
 ]
 
