@@ -197,19 +197,32 @@ databridge_etl_tools \
     --s3_key staging/test/candidates.csv \
     extract
 
-# Extract from Sharepoint
+# Extract from Sharepoint Excel
 databridge_etl_tools \
     sharepoint \
     --graphapi_tenant_id <Tenant ID from Keeper> \
     --graphapi_application_id <Application ID from Keeper> \
-    --graphapi_secret_value' <Secret Value from Keeper> \
+    --graphapi_secret_value <Secret Value from Keeper> \
     --site_name ps360-metrics-share \
     --file_path etl_tools_test_workbook.xlsx \
     --s3_bucket test \
     --s3_key staging/test/sharepoint_xlsx_test.csv \
     --sheet_name Dataset \
     extract
+
+ # Extract from Sharepoint List
+ databridge_etl_tools \
+    sharepoint-list \
+    --site_name ps360-metrics-share \
+    --list_name "PPR 311 Test List" \
+    --s3_bucket citygeo-testing \
+    --s3_key ppr_test.csv \
+    --debug \
+    extract
+
 ```
+
+
 
 ## Development
 To manually test while developing, the package can be entered using the -m module flag (due to the presence of the `__main__.py` file)
@@ -357,3 +370,30 @@ For this reason you should make changes to your test branch, make sure they pass
         * `--sheet_name ` TEXT
     * Commands: 
         * `extract` Extracts a dataset in Sharepoint into a CSV file in S3
+
+* `sharepoint-list`: Run ETL commands for Sharepoint Lists
+    * Args:
+        * `--graphapi_tenant_id` TEXT  Tenant ID credential for initializing
+                                  Microsoft GraphAPI client. Should be
+                                  obtained from Keeper.  [required]
+        * `--graphapi_application_id` TEXT  Application ID credential for initializing
+                                  Microsoft GraphAPI client. Should be
+                                  obtained from Keeper.  [required]
+        * `--graphapi_secret_value` TEXT    Secret Value credential for initializing
+                                  Microsoft GraphAPI client. Should be
+                                  obtained from Keeper.  [required]
+        * `--hostname` TEXT       The hostname of the SharePoint site.
+                                  [required]
+        * `--site_name` TEXT                Name of the Sharepoint site in which the
+                                  file is located.  [required]
+        * `--list_name` TEXT                Name of the Sharepoint list.  [required]
+        * `--s3_bucket` TEXT                Bucket to place the extracted csv in.
+        * `--s3_key` TEXT                   Key under the bucket, example:
+                                  "staging/dept/table_name.csv
+        * `--csv_path` TEXT                 Local path to save the extracted csv to -
+                                  required if s3_bucket and s3_key are not
+                                  provided.
+        * `--debug` BOOL Prints output.
+    
+    * Commands: 
+        * `extract` Extracts a SharePoint list to S3 or saves it locally.
