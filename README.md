@@ -10,7 +10,7 @@ The tool can be used either with Docker or as a standalone Python package.
 ## Requirements 
 
 ### (w/o Docker)
-- Python `>=3.7, <3.10` due to dependencies in the `arcgis` package.
+- Python `>=3.12` 
 - Pip
 - AWS CLI
 - Oracle 11g Client
@@ -45,9 +45,6 @@ pip install git+https://github.com/CityOfPhiladelphia/databridge-etl-tools.git
     ```
 * Create a virtual environment if one does not already exist
 * Source your virtual environment 
-* On Python3.9 (and maybe other versions) remove the version dependencies on the following packages: 
-    * `pyproj`
-    * `arcgis`
 * Install the following necessary packages (note that this is copied from the Dockerfile, which essentially does a similar process)
     ```bash
     sudo apt-get install --no-install-recommends
@@ -77,8 +74,7 @@ pip install git+https://github.com/CityOfPhiladelphia/databridge-etl-tools.git
         libaio1 \
         freetds-dev
     ```
-* Attempt to install the python3-dev that matches your python minor version, so for example
-    * `sudo apt-get install python3.9-dev`
+    
 * `pip install .` or `pip install -e ./` if you are contributing to the repository
 	* _Note, you do not need the file_ `docker-fast-requirements.txt`
 
@@ -197,19 +193,38 @@ databridge_etl_tools \
     --s3_key staging/test/candidates.csv \
     extract
 
-# Extract from Sharepoint
+# Extract from Sharepoint Excel
 databridge_etl_tools \
     sharepoint \
     --graphapi_tenant_id <Tenant ID from Keeper> \
     --graphapi_application_id <Application ID from Keeper> \
-    --graphapi_secret_value' <Secret Value from Keeper> \
+    --graphapi_secret_value <Secret Value from Keeper> \
     --site_name ps360-metrics-share \
     --file_path etl_tools_test_workbook.xlsx \
     --s3_bucket test \
     --s3_key staging/test/sharepoint_xlsx_test.csv \
     --sheet_name Dataset \
     extract
+
+ # Extract from Sharepoint List
+ databridge_etl_tools \
+    sharepoint-list \
+    --graphapi_tenant_id <Tenant ID from Keeper> \
+    # Leave out if set as environment AZURE_TENANT_ID variable
+    --graphapi_application_id <Application ID from Keeper> \
+    # Leave out if set as AZURE_CLIENT_ID environment variable
+    --graphapi_secret_value <Secret Value from Keeper> \
+    # Leave out if set as AZURE_CLIENT_SECRET environment variable
+    --site_name ps360-metrics-share \
+    --list_name "PPR 311 Test List" \
+    --s3_bucket test \
+    --s3_key ppr_test.csv \
+    --debug \
+    extract
+
 ```
+
+
 
 ## Development
 To manually test while developing, the package can be entered using the -m module flag (due to the presence of the `__main__.py` file)
@@ -357,3 +372,27 @@ For this reason you should make changes to your test branch, make sure they pass
         * `--sheet_name ` TEXT
     * Commands: 
         * `extract` Extracts a dataset in Sharepoint into a CSV file in S3
+
+* `sharepoint-list`: Run ETL commands for Sharepoint Lists
+    * Args:
+        * `--graphapi_tenant_id` TEXT  Tenant ID credential for initializing
+                                  Microsoft GraphAPI client. an be provided directly or read from the `AZURE_TENANT_ID` environment variable.  [required]
+        * `--graphapi_application_id` TEXT  Application ID credential for initializing
+                                  Microsoft GraphAPI client. Can be provided directly or read from the `AZURE_CLIENT_ID` environment variable.  [required]
+        * `--graphapi_secret_value` TEXT    Secret Value credential for initializing
+                                  Microsoft GraphAPI client. Can be provided directly or read from the `AZURE_CLIENT_SECRET` environment variable. [required]
+        * `--hostname` TEXT       The hostname of the SharePoint site.
+                                  [required]
+        * `--site_name` TEXT                Name of the Sharepoint site in which the
+                                  file is located.  [required]
+        * `--list_name` TEXT                Name of the Sharepoint list.  [required]
+        * `--s3_bucket` TEXT                Bucket to place the extracted csv in.
+        * `--s3_key` TEXT                   Key under the bucket, example:
+                                  "staging/dept/table_name.csv
+        * `--csv_path` TEXT                 Local path to save the extracted csv to -
+                                  required if s3_bucket and s3_key are not
+                                  provided.
+        * `--debug` BOOL Prints output.
+    
+    * Commands: 
+        * `extract` Extracts a SharePoint list to S3 or saves it locally.

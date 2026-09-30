@@ -18,7 +18,7 @@ description = "Command line tools to extract and load SQL data to various endpoi
 authors = [
     {name = "citygeo", email = "maps@phila.gov"},
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = "MIT"
 dependencies = [
@@ -48,20 +48,20 @@ dependencies = [
     "Shapely",
     "psycopg",
     "psycopg2-binary",
-    "six",
-    "moto",
     "pandas",
     "pytest",
     "requests-mock",
-    "stringcase", 
-    "hurry.filesize", 
-    "smart_open", 
+    "stringcase",
+    "hurry.filesize",
+    "smart_open",
     "retrying",
     "azure-core", # Necessary for sharepoint
     "azure-identity", # Necessary for sharepoint
     "msgraph-core", # Necessary for sharepoint
-    "msgraph-beta-sdk", # Necessary for sharepoint
-    "openpyxl" # Necessary for sharepoint
+    "msgraph-beta-sdk", # Necessary for sharepoint # Necessary for sharepoint
+    "openpyxl",
+    "espy @ git+https://github.com/CityOfPhiladelphia/espy.git@v2.0.0",
+    "pydantic>=2.13.5",
 ]
 
 # installs our command as a cli runnable script
