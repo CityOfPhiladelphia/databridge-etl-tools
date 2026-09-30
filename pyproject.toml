@@ -11,6 +11,9 @@ py_modules = ['databridge_etl_tools']
 where = ["."]
 exclude = ["venv*", "tests*", "docs*"]
 
+[tool.uv.sources]
+espy = { git = "https://github.com/CityOfPhiladelphia/espy.git", tag = "v2.0.0" }
+
 [project]
 name = "databridge-etl-tools"
 version = "1.5.0" 
@@ -18,7 +21,7 @@ description = "Command line tools to extract and load SQL data to various endpoi
 authors = [
     {name = "citygeo", email = "maps@phila.gov"},
 ]
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.12,<3.14"
 readme = "README.md"
 license = "MIT"
 dependencies = [
@@ -53,15 +56,17 @@ dependencies = [
     "pandas",
     "pytest",
     "requests-mock",
-    "stringcase", 
-    "hurry.filesize", 
-    "smart_open", 
+    "stringcase",
+    "hurry.filesize",
+    "smart_open",
     "retrying",
     "azure-core", # Necessary for sharepoint
     "azure-identity", # Necessary for sharepoint
     "msgraph-core", # Necessary for sharepoint
-    "msgraph-beta-sdk", # Necessary for sharepoint
-    "openpyxl" # Necessary for sharepoint
+    "msgraph-beta-sdk", # Necessary for sharepoint # Necessary for sharepoint
+    "openpyxl",
+    "espy",
+    "pydantic>=2.13.5",
 ]
 
 # installs our command as a cli runnable script

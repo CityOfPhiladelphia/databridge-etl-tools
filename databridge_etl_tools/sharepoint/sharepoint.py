@@ -1,8 +1,6 @@
-import logging 
-import sys
+import logging
 from azure.identity import ClientSecretCredential
 from msgraph_beta import GraphServiceClient
-from datetime import datetime, date
 import asyncio
 import re
 import boto3

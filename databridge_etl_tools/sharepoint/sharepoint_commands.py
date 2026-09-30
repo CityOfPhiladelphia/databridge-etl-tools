@@ -1,6 +1,7 @@
-from .. import utils 
-from .sharepoint import Sharepoint
 import click
+
+from .sharepoint import Sharepoint
+
 
 @click.group()
 @click.pass_context
