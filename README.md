@@ -213,9 +213,15 @@ databridge_etl_tools \
  # Extract from Sharepoint List
  databridge_etl_tools \
     sharepoint-list \
+    --graphapi_tenant_id <Tenant ID from Keeper> \
+    # Leave out if set as environment AZURE_TENANT_ID variable
+    --graphapi_application_id <Application ID from Keeper> \
+    # Leave out if set as AZURE_CLIENT_ID environment variable
+    --graphapi_secret_value <Secret Value from Keeper> \
+    # Leave out if set as AZURE_CLIENT_SECRET environment variable
     --site_name ps360-metrics-share \
     --list_name "PPR 311 Test List" \
-    --s3_bucket citygeo-testing \
+    --s3_bucket test \
     --s3_key ppr_test.csv \
     --debug \
     extract
@@ -374,14 +380,11 @@ For this reason you should make changes to your test branch, make sure they pass
 * `sharepoint-list`: Run ETL commands for Sharepoint Lists
     * Args:
         * `--graphapi_tenant_id` TEXT  Tenant ID credential for initializing
-                                  Microsoft GraphAPI client. Should be
-                                  obtained from Keeper.  [required]
+                                  Microsoft GraphAPI client. an be provided directly or read from the `AZURE_TENANT_ID` environment variable.  [required]
         * `--graphapi_application_id` TEXT  Application ID credential for initializing
-                                  Microsoft GraphAPI client. Should be
-                                  obtained from Keeper.  [required]
+                                  Microsoft GraphAPI client. Can be provided directly or read from the `AZURE_CLIENT_ID` environment variable.  [required]
         * `--graphapi_secret_value` TEXT    Secret Value credential for initializing
-                                  Microsoft GraphAPI client. Should be
-                                  obtained from Keeper.  [required]
+                                  Microsoft GraphAPI client. Can be provided directly or read from the `AZURE_CLIENT_SECRET` environment variable. [required]
         * `--hostname` TEXT       The hostname of the SharePoint site.
                                   [required]
         * `--site_name` TEXT                Name of the Sharepoint site in which the
