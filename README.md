@@ -10,7 +10,7 @@ The tool can be used either with Docker or as a standalone Python package.
 ## Requirements 
 
 ### (w/o Docker)
-- Python `>=3.7, <3.10` due to dependencies in the `arcgis` package.
+- Python `>=3.12` 
 - Pip
 - AWS CLI
 - Oracle 11g Client
@@ -45,9 +45,6 @@ pip install git+https://github.com/CityOfPhiladelphia/databridge-etl-tools.git
     ```
 * Create a virtual environment if one does not already exist
 * Source your virtual environment 
-* On Python3.9 (and maybe other versions) remove the version dependencies on the following packages: 
-    * `pyproj`
-    * `arcgis`
 * Install the following necessary packages (note that this is copied from the Dockerfile, which essentially does a similar process)
     ```bash
     sudo apt-get install --no-install-recommends
@@ -77,8 +74,7 @@ pip install git+https://github.com/CityOfPhiladelphia/databridge-etl-tools.git
         libaio1 \
         freetds-dev
     ```
-* Attempt to install the python3-dev that matches your python minor version, so for example
-    * `sudo apt-get install python3.9-dev`
+    
 * `pip install .` or `pip install -e ./` if you are contributing to the repository
 	* _Note, you do not need the file_ `docker-fast-requirements.txt`
 
