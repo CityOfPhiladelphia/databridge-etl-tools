@@ -60,7 +60,7 @@ dependencies = [
     "msgraph-core", # Necessary for sharepoint
     "msgraph-beta-sdk", # Necessary for sharepoint # Necessary for sharepoint
     "openpyxl",
-    "espy @ git+https://github.com/CityOfPhiladelphia/espy.git@v2.0.0",
+    "espy @ git+https://github.com/CityOfPhiladelphia/espy.git@v2.0.2",
     "pydantic>=2.13.5",
 ]
 
