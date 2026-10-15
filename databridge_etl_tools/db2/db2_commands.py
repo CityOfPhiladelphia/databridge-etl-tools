@@ -26,8 +26,8 @@ def copy_dept_to_enterprise(ctx, **kwargs):
 @db2.command()
 @click.pass_context
 @click.option('--to_srid', required=True, show_default=True, help='''Reproject to a new table with this SRID''')
-@click.option('--xshift', default=-0.20, required=False, help='Shift the x coordinates (East/West) by this amount of cm, default amounts are used exclusively for reprojecting 2272 to 3857')
-@click.option('--yshift', default=+1.18, required=False, help='Shift the y coordinates (North/South) by this amount of cm, default amounts are used exclusively for reprojecting 2272 to 3857')
+@click.option('--xshift', default=-0.5, required=False, help='Shift the x coordinates (East/West) in the source SRID, by this amount of cm, default amounts are used exclusively for reprojecting 2272 to 3857')
+@click.option('--yshift', default=+3.0, required=False, help='Shift the y coordinates (North/South) in the source SRID, by this amount of cm, default amounts are used exclusively for reprojecting 2272 to 3857')
 def reproject_shapes(ctx, **kwargs):
     """Reproject the table to a different spatial reference system, right now only supports reprojecting to 3857."""
     db2 = Db2(**ctx.obj, **kwargs)

@@ -741,18 +741,9 @@ class Db2:
         dst_srid = self.to_srid
         geom_col = sql.Identifier(self.geom_info["geom_field"])
 
-        # 1. Base Geometry / Reprojection Expression
-        if src_srid == dst_srid:
-            # Pass geometry through as-is if no reprojection is needed
-            expr = geom_col
-        else:
-            # PostGIS handles any valid src -> dst conversion defined in spatial_ref_sys
-            expr = sql.SQL("ST_Transform({geom}, {to_srid})").format(
-                geom=geom_col,
-                to_srid=sql.Literal(dst_srid),
-            )
+        expr = geom_col
 
-        # 2. Conditional Shift / Nudge
+        # 1. Conditional Shift / Nudge FIRST (in source SRID units, e.g., 2272 feet)
         has_shift = getattr(self, "xshift", 0) != 0 or getattr(
             self, "yshift", 0
         ) != 0
@@ -765,7 +756,20 @@ class Db2:
                 yshift=sql.Literal(self.yshift),
             )
 
+        # 2. Reprojection SECOND
+        if src_srid != dst_srid:
+            expr = sql.SQL("ST_Transform({geom}, {to_srid})").format(
+                geom=expr,
+                to_srid=sql.Literal(dst_srid),
+            )
+
+        # 3. Standardize Polygons/Lines to Multi*
+        geom_type = self.geom_info.get("type", "").upper()
+        if "POLYGON" in geom_type or "LINESTRING" in geom_type:
+            expr = sql.SQL("ST_Multi({base_expr})").format(base_expr=expr)
+
         return expr
+
 
     def copy_rows_transformed(self, cur, dst_table: str):
         """Execute in-database transform and copy directly via PostGIS."""
@@ -795,6 +799,8 @@ class Db2:
             geom_expr=geom_expr,
         )
 
+        print(insert_sql.as_string(cur))
+
         print("Transforming and inserting records inside PostgreSQL...")
         cur.execute(insert_sql)
         print(f"Transformed and inserted {cur.rowcount} rows.")
@@ -804,7 +810,7 @@ class Db2:
         self.get_table_column_info_from_enterprise()
         self.get_geom_column_info()
 
-        dest_table = f"{self.enterprise_dataset_name}_3857"
+        dest_table = f"{self.enterprise_dataset_name}_{self.to_srid}"
         geom_col_name = self.geom_info["geom_field"]
 
         with psycopg.connect(self.libpq_conn_string) as conn:
@@ -818,7 +824,7 @@ class Db2:
                     schema=self.enterprise_schema, table=dest_table
                 ):
                     print(
-                        f"Creating destination table {self.enterprise_schema}.{dest_table}..."
+                        f"Creating destination table {self.enterprise_schema}.{dest_table} with geom type {self.geom_info['geom_type']}..."
                     )
                     cur.execute(
                         sql.SQL(
